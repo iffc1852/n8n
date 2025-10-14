@@ -40,7 +40,7 @@
       if (rec) rec.abort();
 
       rec = new (window.SpeechRecognition || window.webkitSpeechRecognition)();
-      rec.lang = 'zh-TW';
+      rec.lang = 'zh';
       rec.continuous = true;
       rec.interimResults = false;
 
@@ -146,4 +146,5 @@
   </script>
 </body>
 </html>
+
 
