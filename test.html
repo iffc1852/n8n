@@ -12,7 +12,7 @@
 <body>
   <h2>🤖 語音互動 AI 助理</h2>
   <p>輸入你的 AI 名稱與 n8n Webhook 網址：</p>
-  <input id="aiName" placeholder="AI 名稱 (例如 小智2)" /><br>
+  <input id="aiName" placeholder="AI 名稱 (例如 小智)" /><br>
   <input id="webhookUrl" placeholder="n8n Webhook URL" /><br>
   <button onclick="startWakeListener()">啟動語音監聽</button>
   <p id="status">尚未啟動</p>
@@ -23,9 +23,10 @@
     let mediaRecorder;
     let audioChunks = [];
     let audioContext, analyser, source;
-    let silenceTimer = null;
 
-    // ===== [1] 開始語音監聽 =====
+    let rec; // 全域保存 SpeechRecognition 實例
+
+    // ===== [1] 啟動語音喚醒監聽 =====
     function startWakeListener() {
       aiName = document.getElementById("aiName").value.trim();
       n8nUrl = document.getElementById("webhookUrl").value.trim();
@@ -35,7 +36,10 @@
         return;
       }
 
-      const rec = new (window.SpeechRecognition || window.webkitSpeechRecognition)();
+      // 若已有辨識器，先中止避免重複
+      if (rec) rec.abort();
+
+      rec = new (window.SpeechRecognition || window.webkitSpeechRecognition)();
       rec.lang = 'zh-TW';
       rec.continuous = true;
       rec.interimResults = false;
@@ -45,10 +49,11 @@
         console.log("🎧 偵測到語音:", transcript);
         document.getElementById("status").innerText = "聽到: " + transcript;
 
+        // 若偵測到 AI 名稱 → 停止監聽並開始錄音
         if (transcript.includes(aiName)) {
           document.getElementById("status").innerText = `✅ 喚醒「${aiName}」成功，開始錄音！`;
-          rec.stop();
-          startMainRecording(rec); // 傳入辨識器供重啟用
+          rec.stop(); // 暫停喚醒監聽
+          startMainRecording(); // 進入錄音階段
         }
       };
 
@@ -62,11 +67,14 @@
       document.getElementById("status").innerText = "🎤 已啟動喚醒監聽...";
     }
 
-    // ===== [2] 錄音主流程 =====
-    async function startMainRecording(recognizer) {
+    // ===== [2] 錄音階段 =====
+    async function startMainRecording() {
       const stream = await navigator.mediaDevices.getUserMedia({ audio: true });
       audioChunks = [];
-      mediaRecorder = new MediaRecorder(stream, { mimeType: "audio/webm;codecs=opus" }); //強制Opus 編碼格式
+
+      // ✅ 指定 Opus 編碼，確保 Whisper 能解析
+      mediaRecorder = new MediaRecorder(stream, { mimeType: "audio/webm;codecs=opus" });
+
       audioContext = new AudioContext();
       source = audioContext.createMediaStreamSource(stream);
       analyser = audioContext.createAnalyser();
@@ -76,7 +84,7 @@
       mediaRecorder.onstop = async () => {
         const blob = new Blob(audioChunks, { type: "audio/webm" });
         const formData = new FormData();
-        formData.append("audio_file", blob, "voice.webm"); // ← 重點：檔案名字的地方
+        formData.append("audio_file", blob, "voice.webm"); // ← n8n 對應的 binary 名稱
 
         document.getElementById("status").innerText = "📤 傳送錄音中...";
 
@@ -89,23 +97,28 @@
             const audio = new Audio("data:audio/mp3;base64," + result.audio);
             audio.play();
             document.getElementById("status").innerText = "🔊 播放 AI 回覆中...";
+            audio.onended = () => {
+              // 播放結束後再重新回到喚醒監聽
+              document.getElementById("status").innerText = "🎤 等待下一次喚醒...";
+              startWakeListener();
+            };
           } else {
             document.getElementById("status").innerText = "⚠️ 回傳資料錯誤";
+            startWakeListener(); // 即使錯誤也回復監聽
           }
         } catch (err) {
           console.error("傳送錯誤:", err);
           document.getElementById("status").innerText = "❌ 上傳失敗";
+          startWakeListener(); // 失敗也回復監聽
         }
-
-        recognizer.start(); // 錄音結束後自動恢復喚醒模式
       };
 
       mediaRecorder.start();
-      document.getElementById("status").innerText = "🎙️ 錄音中...(3 秒無聲會自動結束)";
+      document.getElementById("status").innerText = "🎙️ 錄音中...(3 秒無聲自動結束)";
       detectSilence();
     }
 
-    // ===== [3] 自動偵測靜音結束 =====
+    // ===== [3] 偵測靜音結束 =====
     function detectSilence() {
       const buffer = new Uint8Array(analyser.fftSize);
       let silenceDuration = 0;
@@ -114,10 +127,10 @@
         analyser.getByteTimeDomainData(buffer);
         let max = Math.max(...buffer.map(v => Math.abs(v - 128)));
 
-        if (max < 10) { // 靜音閾值 (可微調)
-          silenceDuration += 0.1; // 累積 0.1 秒
+        if (max < 20) { // 靜音閾值
+          silenceDuration += 0.1;
         } else {
-          silenceDuration = 0; // 有聲音則重置
+          silenceDuration = 0;
         }
 
         if (silenceDuration >= 3 && mediaRecorder && mediaRecorder.state === "recording") {
@@ -128,12 +141,8 @@
 
         requestAnimationFrame(loop);
       }
-
       requestAnimationFrame(loop);
     }
   </script>
 </body>
 </html>
-
-
-
