@@ -11,7 +11,7 @@
 </head>
 <body>
   <h2>🤖 ChatGPT Voice 最終穩定版語音助理</h2>
-  <input id="aiName" placeholder="輸入喚醒詞 (例如 小文)" /><br>
+  <input id="aiName" placeholder="輸入喚醒詞 (例如 小文1)" /><br>
   <input id="webhookUrl" placeholder="n8n Webhook URL" /><br>
   <button onclick="startWakeListener()">🚀 啟動語音監聽</button>
   <p id="status">尚未啟動</p>
@@ -136,6 +136,7 @@
         document.getElementById("status").innerText = "📤 傳送錄音中...";
         try {
           console.log("📤 已上傳錄音，等待伺服器回覆...");
+          const res = await fetch(n8nUrl, { method: "POST", body: formData });
 
             // 🔹 伺服器回傳二進位音檔（mp3）
           if (!res.ok) throw new Error("伺服器回應錯誤：" + res.status);
@@ -227,5 +228,6 @@ audio.onended = () => {
   </script>
 </body>
 </html>
+
 
 
