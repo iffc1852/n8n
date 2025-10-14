@@ -1,0 +1,136 @@
+<!DOCTYPE html>
+<html lang="zh-TW">
+<head>
+  <meta charset="UTF-8">
+  <title>語音互動 AI 助理</title>
+  <style>
+    body { font-family: sans-serif; text-align: center; margin-top: 40px; }
+    input { padding: 8px; margin: 5px; width: 250px; }
+    #status { margin-top: 20px; font-size: 18px; color: #444; }
+  </style>
+</head>
+<body>
+  <h2>🤖 語音互動 AI 助理</h2>
+  <p>輸入你的 AI 名稱與 n8n Webhook 網址：</p>
+  <input id="aiName" placeholder="AI 名稱 (例如 小智)" /><br>
+  <input id="webhookUrl" placeholder="n8n Webhook URL" /><br>
+  <button onclick="startWakeListener()">啟動語音監聽</button>
+  <p id="status">尚未啟動</p>
+
+  <script>
+    let aiName = "";
+    let n8nUrl = "";
+    let mediaRecorder;
+    let audioChunks = [];
+    let audioContext, analyser, source;
+    let silenceTimer = null;
+
+    // ===== [1] 開始語音監聽 =====
+    function startWakeListener() {
+      aiName = document.getElementById("aiName").value.trim();
+      n8nUrl = document.getElementById("webhookUrl").value.trim();
+
+      if (!aiName || !n8nUrl) {
+        alert("請輸入 AI 名稱與 Webhook URL！");
+        return;
+      }
+
+      const rec = new (window.SpeechRecognition || window.webkitSpeechRecognition)();
+      rec.lang = 'zh-TW';
+      rec.continuous = true;
+      rec.interimResults = false;
+
+      rec.onresult = (event) => {
+        const transcript = event.results[event.results.length - 1][0].transcript.trim();
+        console.log("🎧 偵測到語音:", transcript);
+        document.getElementById("status").innerText = "聽到: " + transcript;
+
+        if (transcript.includes(aiName)) {
+          document.getElementById("status").innerText = `✅ 喚醒「${aiName}」成功，開始錄音！`;
+          rec.stop();
+          startMainRecording(rec); // 傳入辨識器供重啟用
+        }
+      };
+
+      rec.onerror = (err) => console.error("喚醒錯誤:", err);
+      rec.onend = () => {
+        console.log("喚醒監聽結束，重新啟動...");
+        setTimeout(() => rec.start(), 1000);
+      };
+
+      rec.start();
+      document.getElementById("status").innerText = "🎤 已啟動喚醒監聽...";
+    }
+
+    // ===== [2] 錄音主流程 =====
+    async function startMainRecording(recognizer) {
+      const stream = await navigator.mediaDevices.getUserMedia({ audio: true });
+      audioChunks = [];
+      mediaRecorder = new MediaRecorder(stream);
+      audioContext = new AudioContext();
+      source = audioContext.createMediaStreamSource(stream);
+      analyser = audioContext.createAnalyser();
+      source.connect(analyser);
+
+      mediaRecorder.ondataavailable = (e) => audioChunks.push(e.data);
+      mediaRecorder.onstop = async () => {
+        const blob = new Blob(audioChunks, { type: "audio/wav" });
+        const formData = new FormData();
+        formData.append("file", blob, "voice.wav");
+
+        document.getElementById("status").innerText = "📤 傳送錄音中...";
+
+        try {
+          const res = await fetch(n8nUrl, { method: "POST", body: formData });
+          const result = await res.json();
+          console.log("伺服器回傳:", result);
+
+          if (result.success && result.audio) {
+            const audio = new Audio("data:audio/mp3;base64," + result.audio);
+            audio.play();
+            document.getElementById("status").innerText = "🔊 播放 AI 回覆中...";
+          } else {
+            document.getElementById("status").innerText = "⚠️ 回傳資料錯誤";
+          }
+        } catch (err) {
+          console.error("傳送錯誤:", err);
+          document.getElementById("status").innerText = "❌ 上傳失敗";
+        }
+
+        recognizer.start(); // 錄音結束後自動恢復喚醒模式
+      };
+
+      mediaRecorder.start();
+      document.getElementById("status").innerText = "🎙️ 錄音中...(3 秒無聲會自動結束)";
+      detectSilence();
+    }
+
+    // ===== [3] 自動偵測靜音結束 =====
+    function detectSilence() {
+      const buffer = new Uint8Array(analyser.fftSize);
+      let silenceDuration = 0;
+
+      function loop() {
+        analyser.getByteTimeDomainData(buffer);
+        let max = Math.max(...buffer.map(v => Math.abs(v - 128)));
+
+        if (max < 10) { // 靜音閾值 (可微調)
+          silenceDuration += 0.1; // 累積 0.1 秒
+        } else {
+          silenceDuration = 0; // 有聲音則重置
+        }
+
+        if (silenceDuration >= 3 && mediaRecorder && mediaRecorder.state === "recording") {
+          document.getElementById("status").innerText = "🛑 偵測到 3 秒無聲，自動結束錄音";
+          mediaRecorder.stop();
+          return;
+        }
+
+        requestAnimationFrame(loop);
+      }
+
+      requestAnimationFrame(loop);
+    }
+  </script>
+</body>
+</html>
