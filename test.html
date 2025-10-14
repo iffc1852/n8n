@@ -76,7 +76,7 @@
       mediaRecorder.onstop = async () => {
         const blob = new Blob(audioChunks, { type: "audio/wav" });
         const formData = new FormData();
-        formData.append("file", blob, "voice.wav");
+        formData.append("audio_file", blob, "voice.wav"); // ← 重點：檔案名字的地方
 
         document.getElementById("status").innerText = "📤 傳送錄音中...";
 
@@ -134,3 +134,4 @@
   </script>
 </body>
 </html>
+
