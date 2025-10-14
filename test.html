@@ -6,13 +6,14 @@
   <style>
     body { font-family: sans-serif; text-align: center; margin-top: 40px; }
     input { padding: 8px; margin: 5px; width: 250px; }
+    button { padding: 10px 20px; margin-top: 10px; cursor: pointer; }
     #status { margin-top: 20px; font-size: 18px; color: #444; }
   </style>
 </head>
 <body>
   <h2>🤖 語音互動 AI 助理</h2>
   <p>輸入你的 AI 名稱與 n8n Webhook 網址：</p>
-  <input id="aiName" placeholder="AI 名稱 (例如 小智1)" /><br>
+  <input id="aiName" placeholder="AI 名稱 (例如 小智)" /><br>
   <input id="webhookUrl" placeholder="n8n Webhook URL" /><br>
   <button onclick="startWakeListener()">啟動語音監聽</button>
   <p id="status">尚未啟動</p>
@@ -23,8 +24,7 @@
     let mediaRecorder;
     let audioChunks = [];
     let audioContext, analyser, source;
-
-    let rec; // 全域保存 SpeechRecognition 實例
+    let rec; // SpeechRecognition 全域實例
 
     // ===== [1] 啟動語音喚醒監聽 =====
     function startWakeListener() {
@@ -37,10 +37,12 @@
       }
 
       // 若已有辨識器，先中止避免重複
-      if (rec) rec.abort();
+      if (rec) {
+        try { rec.abort(); } catch {}
+      }
 
       rec = new (window.SpeechRecognition || window.webkitSpeechRecognition)();
-      rec.lang = 'zh';
+      rec.lang = 'zh-TW';
       rec.continuous = true;
       rec.interimResults = false;
 
@@ -52,8 +54,8 @@
         // 若偵測到 AI 名稱 → 停止監聽並開始錄音
         if (transcript.includes(aiName)) {
           document.getElementById("status").innerText = `✅ 喚醒「${aiName}」成功，開始錄音！`;
-          rec.stop(); // 暫停喚醒監聽
-          startMainRecording(); // 進入錄音階段
+          rec.stop();
+          startMainRecording();
         }
       };
 
@@ -68,39 +70,80 @@
     }
 
     // ===== [2] 錄音階段 =====
-async function startMainRecording() {
-  // ✅ 關閉語音辨識，釋放麥克風
-  if (rec && rec.stop) {
-    try { rec.stop(); } catch (e) { console.warn("無法停止語音監聽:", e); }
-  }
+    async function startMainRecording() {
+      try {
+        // ✅ 停止語音監聽以釋放麥克風
+        if (rec && rec.stop) {
+          try { rec.stop(); } catch {}
+        }
 
-  // ✅ 等 0.5 秒再啟動錄音，確保麥克風釋放完成
-  await new Promise(r => setTimeout(r, 500));
+        // 等 0.5 秒讓麥克風釋放乾淨
+        await new Promise(r => setTimeout(r, 500));
 
-  const stream = await navigator.mediaDevices.getUserMedia({ audio: true });
+        // 取得麥克風音源
+        const stream = await navigator.mediaDevices.getUserMedia({ audio: true });
+        audioChunks = [];
 
-  // ✅ 強制使用 opus 編碼
-  mediaRecorder = new MediaRecorder(stream, { mimeType: "audio/webm;codecs=opus" });
+        // ✅ 強制使用 opus 編碼（Whisper 支援）
+        mediaRecorder = new MediaRecorder(stream, { mimeType: "audio/webm;codecs=opus" });
 
-  audioChunks = [];
-  mediaRecorder.ondataavailable = (e) => audioChunks.push(e.data);
+        // 建立音量分析器（用於靜音偵測）
+        audioContext = new AudioContext();
+        source = audioContext.createMediaStreamSource(stream);
+        analyser = audioContext.createAnalyser();
+        source.connect(analyser);
 
-  mediaRecorder.onstop = async () => {
-    const blob = new Blob(audioChunks, { type: "audio/webm" });
-    console.log("錄音大小:", blob.size, "bytes");
-    const formData = new FormData();
-    formData.append("file", blob, "voice.webm");
+        mediaRecorder.ondataavailable = (e) => audioChunks.push(e.data);
 
-    document.getElementById("status").innerText = "📤 傳送錄音中...";
-    const res = await fetch(n8nUrl, { method: "POST", body: formData });
-    const result = await res.json();
-    console.log("伺服器回傳:", result);
-  };
+        mediaRecorder.onstop = async () => {
+          const blob = new Blob(audioChunks, { type: "audio/webm" });
+          console.log("🎙️ 錄音大小:", blob.size, "bytes");
 
-  mediaRecorder.start();
-  document.getElementById("status").innerText = "🎙️ 錄音中...(3 秒無聲自動結束)";
-  detectSilence();
-}
+          if (blob.size < 1000) {
+            document.getElementById("status").innerText = "⚠️ 錄音檔太小（可能沒聲音）";
+            startWakeListener();
+            return;
+          }
+
+          // ✅ 上傳到 n8n
+          const formData = new FormData();
+          formData.append("file", blob, "voice.webm");
+
+          document.getElementById("status").innerText = "📤 傳送錄音中...";
+          try {
+            const res = await fetch(n8nUrl, { method: "POST", body: formData });
+            const result = await res.json();
+            console.log("伺服器回傳:", result);
+
+            if (result.success && result.audio) {
+              const audio = new Audio("data:audio/mp3;base64," + result.audio);
+              audio.play().catch(err => console.warn("播放被封鎖:", err));
+              document.getElementById("status").innerText = "🔊 播放 AI 回覆中...";
+              audio.onended = () => {
+                document.getElementById("status").innerText = "🎤 等待下一次喚醒...";
+                startWakeListener();
+              };
+            } else {
+              document.getElementById("status").innerText = "⚠️ 回傳資料錯誤";
+              startWakeListener();
+            }
+          } catch (err) {
+            console.error("傳送錯誤:", err);
+            document.getElementById("status").innerText = "❌ 上傳失敗";
+            startWakeListener();
+          }
+        };
+
+        mediaRecorder.start();
+        document.getElementById("status").innerText = "🎙️ 錄音中...(3 秒無聲自動結束)";
+        detectSilence();
+
+      } catch (err) {
+        console.error("錄音初始化錯誤:", err);
+        alert("錄音失敗：" + err.message);
+        startWakeListener();
+      }
+    }
 
     // ===== [3] 偵測靜音結束 =====
     function detectSilence() {
@@ -111,25 +154,8 @@ async function startMainRecording() {
         analyser.getByteTimeDomainData(buffer);
         let max = Math.max(...buffer.map(v => Math.abs(v - 128)));
 
-        if (max < 20) { // 靜音閾值
-          silenceDuration += 0.1;
-        } else {
-          silenceDuration = 0;
-        }
+        if (max < 20) silenceDuration += 0.1; // 靜音閾值
+        else silenceDuration = 0;
 
         if (silenceDuration >= 3 && mediaRecorder && mediaRecorder.state === "recording") {
-          document.getElementById("status").innerText = "🛑 偵測到 3 秒無聲，自動結束錄音";
-          mediaRecorder.stop();
-          return;
-        }
-
-        requestAnimationFrame(loop);
-      }
-      requestAnimationFrame(loop);
-    }
-  </script>
-</body>
-</html>
-
-
-
+          document.getElemen
