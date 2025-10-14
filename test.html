@@ -8,6 +8,15 @@
     input { padding: 8px; margin: 5px; width: 250px; }
     button { padding: 10px 20px; margin-top: 10px; cursor: pointer; }
     #status { margin-top: 20px; font-size: 18px; color: #333; }
+    #meterContainer {
+      width: 300px; height: 20px; background: #ddd;
+      border-radius: 10px; margin: 20px auto; overflow: hidden; display: none;
+    }
+    #meterBar {
+      height: 100%; width: 0%;
+      background: linear-gradient(to right, #4CAF50, #FFEB3B, #F44336);
+      transition: width 0.05s linear;
+    }
   </style>
 </head>
 <body>
@@ -16,6 +25,7 @@
   <input id="aiName" placeholder="AI 名稱 (例如 小智)" /><br>
   <input id="webhookUrl" placeholder="n8n Webhook URL" /><br>
   <button id="startBtn">啟動語音監聽</button>
+  <div id="meterContainer"><div id="meterBar"></div></div>
   <p id="status">尚未啟動</p>
 
   <script>
@@ -27,6 +37,8 @@
     let audioContext, analyser, source;
     let silenceTimer = null;
     let isRecording = false;
+    let meterBar = document.getElementById("meterBar");
+    let meterContainer = document.getElementById("meterContainer");
 
     document.getElementById("startBtn").addEventListener("click", async () => {
       aiName = document.getElementById("aiName").value.trim();
@@ -90,6 +102,8 @@
     // ===== [2] 錄音階段 =====
     async function startMainRecording() {
       isRecording = true;
+      meterContainer.style.display = "block"; // 顯示音量條
+
       try {
         // 關閉 SpeechRecognition
         if (rec && rec.stop) try { rec.stop(); } catch {}
@@ -109,6 +123,7 @@
 
         mediaRecorder.onstop = async () => {
           isRecording = false;
+          meterContainer.style.display = "none"; // 隱藏音量條
           const blob = new Blob(audioChunks, { type: "audio/webm" });
           console.log("錄音檔案大小:", blob.size, "bytes");
 
@@ -147,18 +162,18 @@
         };
 
         mediaRecorder.start();
-        document.getElementById("status").innerText = "🎙️ 錄音中...（3 秒無聲自動結束）";
-        detectSilence();
-
+        document.getElementById("status").innerText = "🎙️ 錄音中...(3 秒無聲會自動結束)";
+        detectSilenceAndVisualize(); // 🔥 同時啟動靜音偵測＋音量條
       } catch (err) {
         alert("錄音初始化錯誤：" + err.message);
         isRecording = false;
+        meterContainer.style.display = "none";
         startWakeListener();
       }
     }
 
-    // ===== [3] 偵測靜音（3 秒無聲結束錄音） =====
-    function detectSilence() {
+    // ===== [3] 偵測靜音 + 音量可視化 =====
+    function detectSilenceAndVisualize() {
       const buffer = new Uint8Array(analyser.fftSize);
       let silenceDuration = 0;
 
@@ -167,6 +182,11 @@
         analyser.getByteTimeDomainData(buffer);
         const max = Math.max(...buffer.map(v => Math.abs(v - 128)));
 
+        // 音量條更新
+        const volume = Math.min(100, max * 1.2);
+        meterBar.style.width = volume + "%";
+
+        // 偵測靜音
         if (max < 20) silenceDuration += 0.1;
         else silenceDuration = 0;
 
@@ -175,6 +195,7 @@
           mediaRecorder.stop();
           return;
         }
+
         requestAnimationFrame(loop);
       }
       requestAnimationFrame(loop);
