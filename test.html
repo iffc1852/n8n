@@ -28,178 +28,172 @@
   <div id="meterContainer"><div id="meterBar"></div></div>
   <p id="status">尚未啟動</p>
 
-  <script>
-    let aiName = "";
-    let n8nUrl = "";
-    let rec;
-    let mediaRecorder;
-    let audioChunks = [];
-    let audioContext, analyser, source;
-    let silenceTimer = null;
-    let isRecording = false;
-    let meterBar = document.getElementById("meterBar");
-    let meterContainer = document.getElementById("meterContainer");
+<script>
+let aiName = "";
+let n8nUrl = "";
+let rec;
+let mediaRecorder;
+let audioChunks = [];
+let audioContext, analyser, source;
+let isRecording = false;
+let meterBar = document.getElementById("meterBar");
+let meterContainer = document.getElementById("meterContainer");
 
-    document.getElementById("startBtn").addEventListener("click", async () => {
-      aiName = document.getElementById("aiName").value.trim();
-      n8nUrl = document.getElementById("webhookUrl").value.trim();
-      if (!aiName || !n8nUrl) {
-        alert("請輸入 AI 名稱與 Webhook URL！");
+document.getElementById("startBtn").addEventListener("click", async () => {
+  aiName = document.getElementById("aiName").value.trim();
+  n8nUrl = document.getElementById("webhookUrl").value.trim();
+  if (!aiName || !n8nUrl) {
+    alert("請輸入 AI 名稱與 Webhook URL！");
+    return;
+  }
+
+  document.getElementById("status").innerText = "🎤 初始化麥克風中...";
+  try {
+    await navigator.mediaDevices.getUserMedia({ audio: true });
+    startWakeListener();
+  } catch (err) {
+    alert("請允許麥克風權限：" + err.message);
+  }
+});
+
+// ===== [1] 語音喚醒 =====
+function startWakeListener() {
+  try {
+    if (rec) rec.abort();
+    rec = new (window.SpeechRecognition || window.webkitSpeechRecognition)();
+    rec.lang = "zh-TW";
+    rec.continuous = true;
+    rec.interimResults = false;
+
+    rec.onstart = () => {
+      document.getElementById("status").innerText = "🎧 已啟動喚醒，說出 AI 名稱以開始錄音";
+    };
+
+    rec.onresult = (event) => {
+      const transcript = event.results[event.results.length - 1][0].transcript.trim();
+      console.log("偵測到:", transcript);
+      if (transcript.includes(aiName)) {
+        document.getElementById("status").innerText = `✅ 喚醒「${aiName}」成功，準備錄音...`;
+        rec.stop();
+        setTimeout(startMainRecording, 1000); // ⚠️ 延遲1秒再錄音，確保釋放麥克風
+      }
+    };
+
+    rec.onerror = (err) => {
+      console.warn("SpeechRecognition 錯誤:", err);
+      if (!isRecording) setTimeout(() => rec.start(), 1500);
+    };
+
+    rec.onend = () => {
+      if (!isRecording) setTimeout(() => rec.start(), 1000);
+    };
+
+    rec.start();
+  } catch (err) {
+    alert("SpeechRecognition 初始化失敗：" + err.message);
+  }
+}
+
+// ===== [2] 錄音階段 =====
+async function startMainRecording() {
+  isRecording = true;
+  meterContainer.style.display = "block";
+
+  try {
+    const stream = await navigator.mediaDevices.getUserMedia({ audio: true });
+    mediaRecorder = new MediaRecorder(stream, { mimeType: "audio/webm;codecs=opus" });
+    audioChunks = [];
+
+    audioContext = new AudioContext();
+    source = audioContext.createMediaStreamSource(stream);
+    analyser = audioContext.createAnalyser();
+    analyser.fftSize = 2048; // 提高靈敏度
+    source.connect(analyser);
+
+    mediaRecorder.ondataavailable = e => audioChunks.push(e.data);
+    mediaRecorder.onstop = async () => {
+      isRecording = false;
+      meterContainer.style.display = "none";
+
+      const blob = new Blob(audioChunks, { type: "audio/webm" });
+      console.log("錄音大小:", blob.size, "bytes");
+
+      if (blob.size < 2000) {
+        document.getElementById("status").innerText = "⚠️ 沒錄到聲音，回到監聽...";
+        startWakeListener();
         return;
       }
 
-      document.getElementById("status").innerText = "🎤 正在初始化麥克風...";
-      try {
-        // ✅ 先請求麥克風權限
-        await navigator.mediaDevices.getUserMedia({ audio: true });
-        startWakeListener(); // 啟動喚醒
-      } catch (err) {
-        alert("請允許麥克風權限：" + err.message);
-      }
-    });
-
-    // ===== [1] 語音喚醒 =====
-    function startWakeListener() {
-      try {
-        if (rec) rec.abort();
-        rec = new (window.SpeechRecognition || window.webkitSpeechRecognition)();
-        rec.lang = "zh-TW";
-        rec.continuous = true;
-        rec.interimResults = false;
-
-        rec.onstart = () => {
-          document.getElementById("status").innerText = "🎧 已啟動語音喚醒（說出 AI 名稱以開始錄音）";
-        };
-
-        rec.onresult = (event) => {
-          const transcript = event.results[event.results.length - 1][0].transcript.trim();
-          console.log("聽到:", transcript);
-          if (transcript.includes(aiName)) {
-            document.getElementById("status").innerText = `✅ 偵測到喚醒詞「${aiName}」，開始錄音！`;
-            rec.stop();
-            startMainRecording();
-          }
-        };
-
-        rec.onerror = (err) => {
-          console.warn("SpeechRecognition 錯誤:", err);
-          if (!isRecording) setTimeout(() => rec.start(), 1500);
-        };
-
-        rec.onend = () => {
-          if (!isRecording) {
-            console.log("語音監聽結束，自動重啟...");
-            setTimeout(() => rec.start(), 1000);
-          }
-        };
-
-        rec.start();
-      } catch (err) {
-        alert("SpeechRecognition 初始化失敗：" + err.message);
-      }
-    }
-
-    // ===== [2] 錄音階段 =====
-    async function startMainRecording() {
-      isRecording = true;
-      meterContainer.style.display = "block"; // 顯示音量條
+      const formData = new FormData();
+      formData.append("file", blob, "voice.webm");
+      document.getElementById("status").innerText = "📤 上傳錄音中...";
 
       try {
-        // 關閉 SpeechRecognition
-        if (rec && rec.stop) try { rec.stop(); } catch {}
+        const res = await fetch(n8nUrl, { method: "POST", body: formData });
+        const result = await res.json();
+        console.log("伺服器回傳:", result);
 
-        await new Promise(r => setTimeout(r, 500)); // 等麥克風釋放
-
-        const stream = await navigator.mediaDevices.getUserMedia({ audio: true });
-        mediaRecorder = new MediaRecorder(stream, { mimeType: "audio/webm;codecs=opus" });
-        audioChunks = [];
-
-        audioContext = new AudioContext();
-        source = audioContext.createMediaStreamSource(stream);
-        analyser = audioContext.createAnalyser();
-        source.connect(analyser);
-
-        mediaRecorder.ondataavailable = e => audioChunks.push(e.data);
-
-        mediaRecorder.onstop = async () => {
-          isRecording = false;
-          meterContainer.style.display = "none"; // 隱藏音量條
-          const blob = new Blob(audioChunks, { type: "audio/webm" });
-          console.log("錄音檔案大小:", blob.size, "bytes");
-
-          if (blob.size < 2000) {
-            document.getElementById("status").innerText = "⚠️ 沒有錄到有效聲音，回到監聽...";
+        if (result.success && result.audio) {
+          const audio = new Audio("data:audio/mp3;base64," + result.audio);
+          audio.play().catch(err => console.warn("播放錯誤:", err));
+          document.getElementById("status").innerText = "🔊 播放 AI 回覆中...";
+          audio.onended = () => {
+            document.getElementById("status").innerText = "🎤 等待下一次喚醒...";
             startWakeListener();
-            return;
-          }
-
-          const formData = new FormData();
-          formData.append("file", blob, "voice.webm");
-
-          document.getElementById("status").innerText = "📤 上傳錄音中...";
-          try {
-            const res = await fetch(n8nUrl, { method: "POST", body: formData });
-            const result = await res.json();
-            console.log("伺服器回傳:", result);
-
-            if (result.success && result.audio) {
-              const audio = new Audio("data:audio/mp3;base64," + result.audio);
-              audio.play().catch(err => console.warn("播放被封鎖:", err));
-              document.getElementById("status").innerText = "🔊 播放 AI 回覆中...";
-              audio.onended = () => {
-                document.getElementById("status").innerText = "🎤 等待下一次喚醒...";
-                startWakeListener();
-              };
-            } else {
-              document.getElementById("status").innerText = "⚠️ 回傳資料錯誤，回到監聽模式";
-              startWakeListener();
-            }
-          } catch (err) {
-            console.error("上傳失敗:", err);
-            document.getElementById("status").innerText = "❌ 上傳失敗，重新監聽";
-            startWakeListener();
-          }
-        };
-
-        mediaRecorder.start();
-        document.getElementById("status").innerText = "🎙️ 錄音中...(3 秒無聲會自動結束)";
-        detectSilenceAndVisualize(); // 🔥 同時啟動靜音偵測＋音量條
+          };
+        } else {
+          document.getElementById("status").innerText = "⚠️ 回傳資料錯誤";
+          startWakeListener();
+        }
       } catch (err) {
-        alert("錄音初始化錯誤：" + err.message);
-        isRecording = false;
-        meterContainer.style.display = "none";
+        console.error("上傳失敗:", err);
+        document.getElementById("status").innerText = "❌ 上傳失敗，重新監聽";
         startWakeListener();
       }
+    };
+
+    mediaRecorder.start();
+    document.getElementById("status").innerText = "🎙️ 錄音中...(3 秒無聲自動結束)";
+    detectSilenceAndVisualize();
+
+  } catch (err) {
+    alert("錄音錯誤：" + err.message);
+    isRecording = false;
+    meterContainer.style.display = "none";
+    startWakeListener();
+  }
+}
+
+// ===== [3] 偵測靜音 + 音量條 =====
+function detectSilenceAndVisualize() {
+  const buffer = new Uint8Array(analyser.fftSize);
+  let silenceDuration = 0;
+
+  function loop() {
+    if (!isRecording) return;
+    analyser.getByteTimeDomainData(buffer);
+    const max = Math.max(...buffer.map(v => Math.abs(v - 128)));
+
+    // 音量條更新
+    const volume = Math.min(100, max * 1.2);
+    meterBar.style.width = volume + "%";
+
+    // 偵測靜音
+    if (max < 20) silenceDuration += 0.1;
+    else silenceDuration = 0;
+
+    if (silenceDuration >= 3 && mediaRecorder && mediaRecorder.state === "recording") {
+      document.getElementById("status").innerText = "🛑 偵測到 3 秒無聲，自動結束錄音";
+      mediaRecorder.stop();
+      return;
     }
 
-    // ===== [3] 偵測靜音 + 音量可視化 =====
-    function detectSilenceAndVisualize() {
-      const buffer = new Uint8Array(analyser.fftSize);
-      let silenceDuration = 0;
+    requestAnimationFrame(loop);
+  }
+  requestAnimationFrame(loop);
+}
+</script>
 
-      function loop() {
-        if (!isRecording) return;
-        analyser.getByteTimeDomainData(buffer);
-        const max = Math.max(...buffer.map(v => Math.abs(v - 128)));
-
-        // 音量條更新
-        const volume = Math.min(100, max * 1.2);
-        meterBar.style.width = volume + "%";
-
-        // 偵測靜音
-        if (max < 20) silenceDuration += 0.1;
-        else silenceDuration = 0;
-
-        if (silenceDuration >= 3 && mediaRecorder && mediaRecorder.state === "recording") {
-          document.getElementById("status").innerText = "🛑 偵測到 3 秒無聲，自動結束錄音";
-          mediaRecorder.stop();
-          return;
-        }
-
-        requestAnimationFrame(loop);
-      }
-      requestAnimationFrame(loop);
-    }
-  </script>
 </body>
 </html>
+
