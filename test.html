@@ -142,18 +142,21 @@
           const result = JSON.parse(text);
 
           // 播放 TTS 音訊
-          if (result.success && result.audio) {
-            const audio = new Audio("data:audio/mp3;base64," + result.audio);
-            audio.play();
-            document.getElementById("status").innerText = "🔊 播放 AI 回覆中...";
-          } else {
-            document.getElementById("status").innerText = "⚠️ 回傳資料格式錯誤";
-          }
-        } catch (err) {
-          console.error("上傳錯誤:", err);
-          document.getElementById("status").innerText = "❌ 上傳失敗，請檢查 n8n 回應";
-        }
-
+        if (result.success && result.audio) {
+          const audio = new Audio("data:audio/mp3;base64," + result.audio);
+          audio.autoplay = true;
+          audio.volume = 1.0;
+          audio.play().then(() => {
+            console.log("🔊 播放成功！");
+            }).catch(err => {
+            console.warn("⚠️ 自動播放被瀏覽器阻擋:", err);
+            const btn = document.createElement("button");
+            btn.innerText = "▶️ 播放 AI 回覆";
+            btn.onclick = () => audio.play();
+            document.getElementById("status").innerHTML = "";
+            document.getElementById("status").appendChild(btn);
+    });
+  }
         // 錄音結束後 → 自動回到喚醒模式
         startWakeListener();
       };
@@ -215,3 +218,4 @@
   </script>
 </body>
 </html>
+
