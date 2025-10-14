@@ -135,28 +135,37 @@
 
         document.getElementById("status").innerText = "📤 傳送錄音中...";
         try {
-          const res = await fetch(n8nUrl, { method: "POST", body: formData });
-          const text = await res.text();
-          console.log("📥 Raw Response:", text);
-          if (!text) throw new Error("伺服器無回應");
-          const result = JSON.parse(text);
+          console.log("📤 已上傳錄音，等待伺服器回覆...");
 
-          // 播放 TTS 音訊
-        if (result.success && result.audio) {
-          const audio = new Audio("data:audio/mp3;base64," + result.audio);
+            // 🔹 伺服器回傳二進位音檔（mp3）
+          if (!res.ok) throw new Error("伺服器回應錯誤：" + res.status);
+          const blob = await res.blob();
+          console.log("📥 收到音訊 Blob:", blob);
+
+          const audioUrl = URL.createObjectURL(blob);
+          const audio = new Audio(audioUrl);
           audio.autoplay = true;
           audio.volume = 1.0;
+
           audio.play().then(() => {
             console.log("🔊 播放成功！");
+            document.getElementById("status").innerText = "🔊 播放 AI 回覆中...";
             }).catch(err => {
             console.warn("⚠️ 自動播放被瀏覽器阻擋:", err);
             const btn = document.createElement("button");
             btn.innerText = "▶️ 播放 AI 回覆";
             btn.onclick = () => audio.play();
-            document.getElementById("status").innerHTML = "";
-            document.getElementById("status").appendChild(btn);
-    });
-  }
+            const status = document.getElementById("status");
+            status.innerHTML = "";
+            status.appendChild(btn);
+});
+
+// ✅ 播放完畢後自動恢復喚醒監聽
+audio.onended = () => {
+  console.log("🎤 AI 回覆播放結束，自動回到喚醒模式");
+  startWakeListener();
+};
+
         // 錄音結束後 → 自動回到喚醒模式
         startWakeListener();
       };
@@ -218,4 +227,5 @@
   </script>
 </body>
 </html>
+
 
