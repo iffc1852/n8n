@@ -129,20 +129,16 @@
       mediaRecorder.onstop = async () => {
         const blob = new Blob(audioChunks, { type: "audio/webm" });
         console.log("📦 錄音完成，大小:", blob.size, "bytes");
-
         const formData = new FormData();
         formData.append("audio_file", blob, "voice.webm");
 
         document.getElementById("status").innerText = "📤 傳送錄音中...";
-
         try {
           const res = await fetch(n8nUrl, { method: "POST", body: formData });
           const text = await res.text();
           console.log("📥 Raw Response:", text);
-
           if (!text) throw new Error("伺服器無回應");
           const result = JSON.parse(text);
-
           if (result.success && result.audio) {
             const audio = new Audio("data:audio/mp3;base64," + result.audio);
             audio.play();
@@ -155,15 +151,19 @@
           document.getElementById("status").innerText = "❌ 上傳失敗，請檢查 n8n 回應";
         }
 
-        // 錄音結束 → 回到喚醒監聽模式
-        startWakeListener();
+        startWakeListener(); // 錄音結束 → 回到喚醒監聽模式
       };
-
-      // 開始錄音
+    
       mediaRecorder.start();
       document.getElementById("status").innerText = "🎙️ 錄音中...(3 秒無聲會自動結束)";
-      detectSilence(stream);
+
+      // 🕐 延遲 1 秒再啟動靜音偵測
+      setTimeout(() => {
+        console.log("🔊 啟動靜音偵測（延遲1秒）");
+        detectSilence(stream);
+      }, 1000);
     }
+
 
     // -----------------------------------------------------
     // [4] 偵測靜音自動結束錄音
@@ -195,3 +195,4 @@
   </script>
 </body>
 </html>
+
