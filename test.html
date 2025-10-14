@@ -12,7 +12,7 @@
 <body>
   <h2>🤖 語音互動 AI 助理</h2>
   <p>輸入你的 AI 名稱與 n8n Webhook 網址：</p>
-  <input id="aiName" placeholder="AI 名稱 (例如 小智)" /><br>
+  <input id="aiName" placeholder="AI 名稱 (例如 小智1)" /><br>
   <input id="webhookUrl" placeholder="n8n Webhook URL" /><br>
   <button onclick="startWakeListener()">啟動語音監聽</button>
   <p id="status">尚未啟動</p>
@@ -84,7 +84,7 @@
       mediaRecorder.onstop = async () => {
         const blob = new Blob(audioChunks, { type: "audio/webm" });
         const formData = new FormData();
-        formData.append("audio_file", blob, "voice.webm"); // ← n8n 對應的 binary 名稱
+        formData.append("file", blob, "voice.webm"); // ← n8n 對應的 binary 名稱 改掉file會出事
 
         document.getElementById("status").innerText = "📤 傳送錄音中...";
 
@@ -146,3 +146,4 @@
   </script>
 </body>
 </html>
+
