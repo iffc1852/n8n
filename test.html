@@ -2,7 +2,7 @@
 <html lang="zh-TW">
 <head>
   <meta charset="UTF-8" />
-  <title>🎙️ ChatGPT Voice 修正版語音助理</title>
+  <title>🎙️ ChatGPT Voice 最終穩定版語音助理</title>
   <style>
     body { font-family: "Microsoft JhengHei", sans-serif; text-align: center; margin-top: 40px; }
     input, button { padding: 8px; margin: 5px; width: 260px; font-size: 16px; }
@@ -10,7 +10,7 @@
   </style>
 </head>
 <body>
-  <h2>🤖 ChatGPT Voice 修正版語音助理</h2>
+  <h2>🤖 ChatGPT Voice 最終穩定版語音助理</h2>
   <input id="aiName" placeholder="輸入喚醒詞 (例如 小文)" /><br>
   <input id="webhookUrl" placeholder="n8n Webhook URL" /><br>
   <button onclick="startWakeListener()">🚀 啟動語音監聽</button>
@@ -20,9 +20,9 @@
     // ===== 全域變數 =====
     let aiName = "";
     let n8nUrl = "";
-    let rec;                  // SpeechRecognition 實例
-    let isRecognitionActive = false;
-    let shouldRecordAfterEnd = false;  // 🔹旗標：是否在辨識結束後啟動錄音
+    let rec;                           // SpeechRecognition 實例
+    let isRecognitionActive = false;   // 是否正在語音辨識
+    let shouldRecordAfterEnd = false;  // 旗標：在辨識完全結束後是否要錄音
     let mediaRecorder;
     let audioChunks = [];
 
@@ -40,25 +40,25 @@
       const SpeechRecognition = window.SpeechRecognition || window.webkitSpeechRecognition;
       rec = new SpeechRecognition();
       rec.lang = "zh-TW";
-      rec.continuous = true;
-      rec.interimResults = false;
+      rec.continuous = true;       // 持續監聽
+      rec.interimResults = false;  // 不輸出中間結果
 
-      // === 當有語音辨識結果時 ===
-      rec.onresult = async (e) => {
+      // === 語音辨識結果事件 ===
+      rec.onresult = (e) => {
         const txt = e.results[e.results.length - 1][0].transcript.trim();
         console.log("🎧 聽到:", txt);
         document.getElementById("status").innerText = "🎧 聽到: " + txt;
 
-        // ✅ 如果包含喚醒詞（AI 名稱）
+        // ✅ 若包含喚醒詞（AI 名稱）
         if (txt.includes(aiName)) {
           console.log("✅ 偵測到喚醒詞:", aiName);
           document.getElementById("status").innerText = `✅ 喚醒「${aiName}」成功，準備錄音...`;
-          shouldRecordAfterEnd = true;  // 🔹等 onend 時再錄音
-          rec.abort(); // 🔹不要直接錄音
+          shouldRecordAfterEnd = true;  // 在 onend 事件中啟動錄音
+          rec.abort(); // 中止辨識（等完全結束後再錄音）
         }
       };
 
-      // === 發生錯誤時 ===
+      // === 錯誤事件 ===
       rec.onerror = (err) => {
         if (err.error === "aborted") {
           console.log("🎤 辨識中止（準備錄音）");
@@ -68,9 +68,9 @@
         isRecognitionActive = false;
       };
 
-      // === 辨識完全結束後 ===
+      // === 辨識完全結束事件 ===
       rec.onend = async () => {
-        // 🧩 若是因喚醒詞而中止 → 等辨識完全結束再錄音
+        // ✅ 若剛剛因喚醒詞中止 → 現在正式開始錄音
         if (shouldRecordAfterEnd) {
           shouldRecordAfterEnd = false;
           console.log("🎤 SpeechRecognition 已完全結束，準備開始錄音...");
@@ -79,7 +79,7 @@
           return;
         }
 
-        // 🧩 若目前沒在錄音 → 自動重啟辨識
+        // 🧩 若目前沒在錄音 → 自動重啟辨識（維持喚醒狀態）
         if (!mediaRecorder || mediaRecorder.state !== "recording") {
           console.log("🔁 喚醒監聽重新啟動中...");
           setTimeout(() => rec.start(), 800);
@@ -89,14 +89,14 @@
         }
       };
 
-      // 啟動辨識
+      // 啟動喚醒監聽
       rec.start();
       isRecognitionActive = true;
       document.getElementById("status").innerText = "🎤 已啟動喚醒監聽中...";
     }
 
     // -----------------------------------------------------
-    // [2] 等待麥克風釋放
+    // [2] 等待麥克風釋放（確保不被 SpeechRecognition 佔用）
     // -----------------------------------------------------
     async function waitMicReady(maxWait = 2000) {
       console.log("⏳ 等待麥克風釋放中...");
@@ -126,6 +126,7 @@
       mediaRecorder = new MediaRecorder(stream);
       mediaRecorder.ondataavailable = (e) => audioChunks.push(e.data);
 
+      // 🔹 錄音結束時上傳音訊給 n8n
       mediaRecorder.onstop = async () => {
         const blob = new Blob(audioChunks, { type: "audio/webm" });
         console.log("📦 錄音完成，大小:", blob.size, "bytes");
@@ -139,6 +140,8 @@
           console.log("📥 Raw Response:", text);
           if (!text) throw new Error("伺服器無回應");
           const result = JSON.parse(text);
+
+          // 播放 TTS 音訊
           if (result.success && result.audio) {
             const audio = new Audio("data:audio/mp3;base64," + result.audio);
             audio.play();
@@ -151,22 +154,23 @@
           document.getElementById("status").innerText = "❌ 上傳失敗，請檢查 n8n 回應";
         }
 
-        startWakeListener(); // 錄音結束 → 回到喚醒監聽模式
+        // 錄音結束後 → 自動回到喚醒模式
+        startWakeListener();
       };
-    
-      mediaRecorder.start();
-      document.getElementById("status").innerText = "🎙️ 錄音中...(3 秒無聲會自動結束)";
 
-      // 🕐 延遲 1 秒再啟動靜音偵測
+      // 🔹 啟動錄音
+      mediaRecorder.start();
+      document.getElementById("status").innerText = "🎙️ 錄音中...(靜音 3 秒會自動結束)";
+
+      // 🕐 延遲 1 秒後再啟動靜音偵測，避免誤判開頭空白
       setTimeout(() => {
-        console.log("🔊 啟動靜音偵測（延遲1秒）");
+        console.log("🔊 啟動靜音偵測（延遲 1 秒）");
         detectSilence(stream);
       }, 1000);
     }
 
-
     // -----------------------------------------------------
-    // [4] 偵測靜音自動結束錄音
+    // [4] 靜音偵測：必須先有聲音才開始倒數
     // -----------------------------------------------------
     function detectSilence(stream) {
       const audioContext = new AudioContext();
@@ -174,25 +178,40 @@
       const analyser = audioContext.createAnalyser();
       source.connect(analyser);
       const buffer = new Uint8Array(analyser.fftSize);
-      let silenceDuration = 0;
+
+      let silenceDuration = 0;  // 已靜音秒數
+      let hasVoice = false;     // 是否已出現人聲
+      let lastActive = 0;       // 最近有聲音時間戳
 
       function loop() {
         analyser.getByteTimeDomainData(buffer);
         let max = Math.max(...buffer.map(v => Math.abs(v - 128)));
-        if (max < 10) silenceDuration += 0.1;
-        else silenceDuration = 0;
+        const now = audioContext.currentTime;
 
-        if (silenceDuration >= 3 && mediaRecorder && mediaRecorder.state === "recording") {
+        // 🎙️ 若音量超過閾值（偵測到人聲）
+        if (max > 15) { // 可調整閾值 10～20 視麥克風靈敏度
+          if (!hasVoice) console.log("🗣️ 偵測到人聲，開始啟動靜音計時監控");
+          hasVoice = true;
+          lastActive = now;
+          silenceDuration = 0;
+        } else if (hasVoice) {
+          // ✅ 只有在出現過人聲後，才開始累計靜音時間
+          silenceDuration = now - lastActive;
+        }
+
+        // 🧠 若已出現過人聲、且靜音超過 3 秒 → 自動停止錄音
+        if (hasVoice && silenceDuration >= 3 && mediaRecorder && mediaRecorder.state === "recording") {
           console.log("🛑 偵測到 3 秒無聲，自動結束錄音");
           mediaRecorder.stop();
           stream.getTracks().forEach(t => t.stop());
           return;
         }
+
         requestAnimationFrame(loop);
       }
+
       requestAnimationFrame(loop);
     }
   </script>
 </body>
 </html>
-
