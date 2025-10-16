@@ -1,4 +1,4 @@
-import os, time, queue, tempfile, warnings
+import os, time, queue, tempfile, warnings, mimetypes
 import numpy as np
 import sounddevice as sd
 import webrtcvad
@@ -7,10 +7,11 @@ from faster_whisper import WhisperModel
 import requests
 from pydub import AudioSegment
 from pydub.playback import play
+from pydub.utils import which
 
 # ===== 基本設定 =====
 WAKE_WORD = "小文"
-N8N_WEBHOOK_URL = "http://localhost:5678/webhook/e0fba784-ca1b-4bdf-b7eb-0465aa973959"  # ⚠️ 改成你的 Production webhook
+N8N_WEBHOOK_URL = "http://localhost:5678/webhook/e0fba784-ca1b-4bdf-b7eb-0465aa973959"   # ⚠️ 改成你的 webhook
 MODEL_SIZE = "small"
 SAMPLE_RATE = 16000
 CHANNELS = 1
@@ -22,12 +23,11 @@ warnings.filterwarnings("ignore", category=UserWarning)
 sd.default.samplerate = SAMPLE_RATE
 sd.default.channels = CHANNELS
 
-# 暫存目錄
+# 暫存資料夾
 TEMP_DIR = os.path.join(tempfile.gettempdir(), "ai_bot")
 os.makedirs(TEMP_DIR, exist_ok=True)
 WAKE_WAV = os.path.join(TEMP_DIR, "wake.wav")
 INPUT_WAV = os.path.join(TEMP_DIR, "input.wav")
-REPLY_MP3 = os.path.join(TEMP_DIR, "reply.mp3")
 
 print("🧠 載入 faster-whisper 模型中（CPU / int8）...")
 model = WhisperModel(MODEL_SIZE, device="cpu", compute_type="int8")
@@ -36,6 +36,9 @@ print("🖥️ 已啟用 CPU 模式（int8）")
 vad = webrtcvad.Vad(VAD_AGGRESSIVENESS)
 FRAME_DURATION_MS = 30
 FRAME_SIZE = int(SAMPLE_RATE * FRAME_DURATION_MS / 1000)
+
+# 指定 ffmpeg 路徑（若未加入 PATH，可自行修改）
+AudioSegment.converter = which("ffmpeg") or r"C:\ffmpeg\bin\ffmpeg.exe"
 
 # ===== 錄音 + 偵測 =====
 def record_until_silence(silence_timeout: float):
@@ -47,28 +50,30 @@ def record_until_silence(silence_timeout: float):
         q_frames.put(bytes(indata))
 
     print(f"🎙️ 錄音中（靜音>{silence_timeout:.1f}s 自動結束）...")
-    with sd.RawInputStream(samplerate=SAMPLE_RATE, blocksize=FRAME_SIZE,
-                           dtype="int16", channels=CHANNELS, callback=cb):
-        while True:
-            frame = q_frames.get()
-            is_speech = vad.is_speech(frame, SAMPLE_RATE)
-            if is_speech:
-                last_voice = time.time()
-                audio_chunks.append(np.frombuffer(frame, dtype=np.int16))
-            elif audio_chunks and (time.time() - last_voice) > silence_timeout:
-                break
+    try:
+        with sd.RawInputStream(samplerate=SAMPLE_RATE, blocksize=FRAME_SIZE,
+                               dtype="int16", channels=CHANNELS, callback=cb):
+            while True:
+                frame = q_frames.get()
+                is_speech = vad.is_speech(frame, SAMPLE_RATE)
+                if is_speech:
+                    last_voice = time.time()
+                    audio_chunks.append(np.frombuffer(frame, dtype=np.int16))
+                elif audio_chunks and (time.time() - last_voice) > silence_timeout:
+                    break
+    except Exception as e:
+        print("❌ 錄音錯誤：", e)
+        return None
 
     if not audio_chunks:
         print("🔇 未偵測到有效人聲")
         return None
-    audio = np.concatenate(audio_chunks)
-    return audio
+    return np.concatenate(audio_chunks)
 
 def transcribe_np_int16(audio_np, lang=None):
     audio_f32 = audio_np.astype(np.float32) / 32768.0
     segments, _ = model.transcribe(audio_f32, language=lang, beam_size=5)
-    text = "".join(seg.text for seg in segments).strip()
-    return text
+    return "".join(seg.text for seg in segments).strip()
 
 def save_wav(path, audio_np):
     write(path, SAMPLE_RATE, audio_np)
@@ -78,62 +83,80 @@ def send_to_n8n(wav_path):
     try:
         print("📡 傳送音訊到 n8n...")
         with open(wav_path, "rb") as f:
-            # ✅ 加上檔名與 MIME type，模擬瀏覽器行為
-            files = {
-                "audio_file": ("voice.wav", f, "audio/wav")
-            }
+            files = {"audio_file": ("voice.wav", f, "audio/wav")}
             resp = requests.post(N8N_WEBHOOK_URL, files=files, timeout=180)
-        if resp.status_code == 200:
-            with open(REPLY_MP3, "wb") as out:
+
+        ctype = resp.headers.get("Content-Type", "")
+        print("🔍 n8n 回傳 Content-Type:", ctype)
+
+        # 音訊類型才存為播放檔
+        if resp.status_code == 200 and ctype.startswith("audio/"):
+            ext = mimetypes.guess_extension(ctype.split(";")[0]) or ".bin"
+            reply_path = os.path.join(TEMP_DIR, f"reply{ext}")
+            with open(reply_path, "wb") as out:
                 out.write(resp.content)
-            print("📩 收到回覆音訊")
-            return REPLY_MP3
-        else:
-            print(f"⚠️ n8n 回傳錯誤: {resp.status_code} {resp.text}")
-            return None
+            print("📩 收到回覆音訊 →", reply_path)
+            return reply_path
+
+        # 若非音訊回傳
+        err_path = os.path.join(TEMP_DIR, "reply_error.txt")
+        with open(err_path, "wb") as out:
+            out.write(resp.content)
+        print(f"⚠️ 非音訊回傳（{resp.status_code}）已寫入：{err_path}")
+        return None
+
     except Exception as e:
         print("❌ 上傳失敗：", e)
         return None
 
-# ===== 播放音訊 =====
-def play_audio(path):
+# ===== 播放音訊（自動辨識格式）=====
+def play_audio_any(path):
     if not path or not os.path.exists(path):
         print("⚠️ 找不到回覆音訊")
         return
     try:
-        print("🔊 播放回覆中...")
-        audio = AudioSegment.from_file(path)
+        print("🔊 播放回覆中（自動解碼）...")
+        audio = AudioSegment.from_file(path)  # 自動判斷 mp3/wav/webm/ogg...
         play(audio)
     except Exception as e:
         print("❌ 播放失敗：", e)
 
 # ===== 主流程 =====
 if __name__ == "__main__":
-    print(f"🤖 智慧機器人（喚醒詞版）啟動完成！說出「{WAKE_WORD}」喚醒我。")
+    print(f"🤖 智慧機器人（穩定自動格式版）啟動完成！說出「{WAKE_WORD}」喚醒我。")
+
     while True:
-        wake_audio = record_until_silence(SILENCE_TIMEOUT_WAKE)
-        if wake_audio is None:
-            continue
-        save_wav(WAKE_WAV, wake_audio)
-        wake_text = transcribe_np_int16(wake_audio, lang="zh")
-        print("🗣️ 喚醒辨識：", wake_text)
-        if WAKE_WORD not in wake_text:
-            print("💤 未偵測到喚醒詞，持續監聽…\n")
-            continue
-
-        print("✅ 喚醒成功！請開始說話…")
-        main_audio = record_until_silence(SILENCE_TIMEOUT_MAIN)
-        if main_audio is None:
-            print("⚠️ 沒收到主講內容，回到待命\n")
-            continue
-        save_wav(INPUT_WAV, main_audio)
-
         try:
-            preview = transcribe_np_int16(main_audio, lang=None)
-            print("📝 主講轉文字（預覽）：", preview)
-        except Exception as e:
-            print("（預覽轉文字失敗，不影響上傳）", e)
+            wake_audio = record_until_silence(SILENCE_TIMEOUT_WAKE)
+            if wake_audio is None:
+                continue
+            save_wav(WAKE_WAV, wake_audio)
+            wake_text = transcribe_np_int16(wake_audio, lang="zh")
+            print("🗣️ 喚醒辨識：", wake_text)
+            if WAKE_WORD not in wake_text:
+                print("💤 未偵測到喚醒詞，持續監聽…\n")
+                continue
 
-        reply_path = send_to_n8n(INPUT_WAV)
-        play_audio(reply_path)
-        print("🔁 返回待命狀態…\n")
+            print("✅ 喚醒成功！請開始說話…")
+            main_audio = record_until_silence(SILENCE_TIMEOUT_MAIN)
+            if main_audio is None:
+                print("⚠️ 沒收到主講內容，回到待命\n")
+                continue
+            save_wav(INPUT_WAV, main_audio)
+
+            try:
+                preview = transcribe_np_int16(main_audio)
+                print("📝 主講轉文字（預覽）：", preview)
+            except Exception as e:
+                print("（預覽轉文字失敗，不影響上傳）", e)
+
+            reply_path = send_to_n8n(INPUT_WAV)
+            play_audio_any(reply_path)
+            print("🔁 回到待命狀態…（說『小智』可再次喚醒）\n")
+
+        except KeyboardInterrupt:
+            print("\n🛑 已手動結束程式。")
+            break
+        except Exception as e:
+            print("⚠️ 發生例外：", e)
+            time.sleep(2)
