@@ -10,17 +10,23 @@ from pydub.utils import which
 
 # ===== 基本設定 =====
 WAKE_WORD = "小文"
-N8N_WEBHOOK_URL = "http://localhost:5678/webhook/e0fba784-ca1b-4bdf-b7eb-0465aa973959"   # ⚠️ 改成你的 webhook
+# ⚠️ 改成你的 Production Webhook（非 -test），並確保 workflow 已 Activate
+N8N_WEBHOOK_URL = "https://jose-cigarettes-mutual-tion.trycloudflare.com/webhook/e0fba784-ca1b-4bdf-b7eb-0465aa973959"
+
 MODEL_SIZE = "small"
 SAMPLE_RATE = 16000
 CHANNELS = 1
 VAD_AGGRESSIVENESS = 2
-SILENCE_TIMEOUT_WAKE = 1.0
-SILENCE_TIMEOUT_MAIN = 1.5
+SILENCE_TIMEOUT_WAKE = 1.0     # 喚醒段靜音結束時間
+SILENCE_TIMEOUT_MAIN = 1.5     # 主講段靜音結束時間
 
-# （可選）指定裝置索引，避免跟其他軟體搶裝置（先用 sd.query_devices() 查）
-INPUT_DEVICE = None   # 例：1
-OUTPUT_DEVICE = None  # 例：3
+# （可選）固定裝置索引，避免與其他軟體搶裝置（用 print(sd.query_devices()) 查）
+INPUT_DEVICE = None   # 例如 1
+OUTPUT_DEVICE = None  # 例如 3
+
+# 你的喚醒確認音檔（支援 wav/mp3/ogg/webm），請放到同資料夾或自訂路徑
+PROJECT_DIR = os.path.dirname(os.path.abspath(__file__))
+WAKE_CONFIRM_FILE = os.path.join(PROJECT_DIR, "answer.ok.mp3")  # ← 換成你的檔名
 
 warnings.filterwarnings("ignore", category=UserWarning)
 sd.default.samplerate = SAMPLE_RATE
@@ -29,8 +35,11 @@ sd.default.channels = CHANNELS
 # 暫存資料夾
 TEMP_DIR = os.path.join(tempfile.gettempdir(), "ai_bot")
 os.makedirs(TEMP_DIR, exist_ok=True)
-WAKE_WAV = os.path.join(TEMP_DIR, "wake.wav")
+WAKE_WAV  = os.path.join(TEMP_DIR, "wake.wav")
 INPUT_WAV = os.path.join(TEMP_DIR, "input.wav")
+
+# 指定 ffmpeg 路徑（若未加入 PATH 請改成你的 ffmpeg.exe）
+AudioSegment.converter = which("ffmpeg") or r"C:\ffmpeg\bin\ffmpeg.exe"
 
 print("🧠 載入 faster-whisper 模型中（CPU / int8）...")
 model = WhisperModel(MODEL_SIZE, device="cpu", compute_type="int8")
@@ -40,11 +49,58 @@ vad = webrtcvad.Vad(VAD_AGGRESSIVENESS)
 FRAME_DURATION_MS = 30
 FRAME_SIZE = int(SAMPLE_RATE * FRAME_DURATION_MS / 1000)
 
-# 指定 ffmpeg 路徑（若未加入 PATH，可自行修改）
-from pydub import AudioSegment
-AudioSegment.converter = which("ffmpeg") or r"C:\ffmpeg\bin\ffmpeg.exe"
+# ============ 小工具 ============
+def has_wake_word(text: str) -> bool:
+    """寬鬆匹配喚醒詞：移除空白後再比對"""
+    return bool(text) and (WAKE_WORD in text.replace(" ", ""))
 
-# ===== 錄音 + 偵測 =====
+# ---------- 喚醒確認音：啟動時預先解碼，之後快速播放 ----------
+WAKE_WAVE_F32 = None  # 會在啟動時載入
+def prepare_wake_confirm():
+    """將 WAKE_CONFIRM_FILE 解碼成與系統相容的 float32 波形，存到記憶體。"""
+    global WAKE_WAVE_F32
+    try:
+        if not os.path.exists(WAKE_CONFIRM_FILE):
+            print("⚠️ 找不到喚醒音檔：", WAKE_CONFIRM_FILE)
+            WAKE_WAVE_F32 = None
+            return
+
+        seg = AudioSegment.from_file(WAKE_CONFIRM_FILE)         # 自動判斷格式
+        seg = seg.set_channels(CHANNELS).set_frame_rate(SAMPLE_RATE)
+
+        samples = np.array(seg.get_array_of_samples())
+        if seg.channels == 2:
+            samples = samples.reshape((-1, 2))
+        denom = float(1 << (8 * seg.sample_width - 1))
+        WAKE_WAVE_F32 = (samples.astype(np.float32) / denom)
+        print("🔔 喚醒音已載入：", WAKE_CONFIRM_FILE)
+    except Exception as e:
+        print("❌ 載入喚醒音失敗：", e)
+        WAKE_WAVE_F32 = None
+
+def play_wake_confirm():
+    """播放預載的喚醒音；若未載入則用短 beep 後備。"""
+    try:
+        sd.stop()
+    except Exception:
+        pass
+    if WAKE_WAVE_F32 is not None:
+        try:
+            sd.play(WAKE_WAVE_F32, samplerate=SAMPLE_RATE, device=OUTPUT_DEVICE, blocking=True)
+            sd.stop()
+            time.sleep(0.1)
+            return
+        except Exception as e:
+            print("（播放預載喚醒音失敗，改用 beep）", e)
+    # 後備：短 beep
+    dur = 0.12
+    t = np.linspace(0, dur, int(SAMPLE_RATE*dur), False)
+    wave = (np.sin(2*np.pi*1000*t) * 0.25).astype(np.float32)
+    sd.play(wave, samplerate=SAMPLE_RATE, blocking=True)
+    sd.stop()
+    time.sleep(0.05)
+
+# ============ 錄音 / STT ============
 def record_until_silence(silence_timeout: float):
     q_frames = queue.Queue()
     audio_chunks = []
@@ -68,10 +124,10 @@ def record_until_silence(silence_timeout: float):
                     break
     except Exception as e:
         print("❌ 錄音錯誤：", e)
-        sd.stop()  # 確保關閉所有 PortAudio stream
+        sd.stop()
         return None
 
-    # 離開 with 後輸入流已關閉；再保險停一次
+    # 離開 with 後輸入流已關閉；保險停一次
     sd.stop()
 
     if not audio_chunks:
@@ -87,7 +143,7 @@ def transcribe_np_int16(audio_np, lang=None):
 def save_wav(path, audio_np):
     write(path, SAMPLE_RATE, audio_np)
 
-# ===== 傳送到 n8n =====
+# ============ 與 n8n 溝通 ============
 def send_to_n8n(wav_path):
     try:
         print("📡 傳送音訊到 n8n...")
@@ -107,7 +163,7 @@ def send_to_n8n(wav_path):
             print("📩 收到回覆音訊 →", reply_path)
             return reply_path
 
-        # 若非音訊回傳
+        # 若非音訊回傳，寫入錯誤檔便於除錯
         err_path = os.path.join(TEMP_DIR, "reply_error.txt")
         with open(err_path, "wb") as out:
             out.write(resp.content)
@@ -118,50 +174,55 @@ def send_to_n8n(wav_path):
         print("❌ 上傳失敗：", e)
         return None
 
-# ===== 播放音訊（用 pydub 解碼 → sounddevice 播放，同一後端最穩）=====
+# ============ 播放 n8n 回覆（pydub 解碼 → sounddevice 播放） ============
 def play_audio_any(path):
     if not path or not os.path.exists(path):
         print("⚠️ 找不到回覆音訊")
         return
     try:
-        print("🔊 播放回覆中（pydub 解碼 → sounddevice 播放）...")
-        # 解碼各種格式
-        seg = AudioSegment.from_file(path)
-        # 統一成單聲道、目標採樣率
+        print("🔊 播放回覆中（自動解碼）...")
+        seg = AudioSegment.from_file(path)                 # 自動判斷格式
         seg = seg.set_channels(CHANNELS).set_frame_rate(SAMPLE_RATE)
 
-        # 轉 numpy（-1.0~1.0 的 float32）
+        # 轉成 numpy float32 (-1.0 ~ 1.0)
         samples = np.array(seg.get_array_of_samples())
         if seg.channels == 2:
             samples = samples.reshape((-1, 2))
         denom = float(1 << (8 * seg.sample_width - 1))
         audio_f32 = (samples.astype(np.float32) / denom)
 
-        # 播放前保險關閉任何殘留 stream
         sd.stop()
         sd.play(audio_f32, samplerate=SAMPLE_RATE, device=OUTPUT_DEVICE, blocking=True)
         sd.stop()
-        time.sleep(0.2)  # 給驅動一點收尾時間，避免連續切換時崩潰
+        time.sleep(0.2)  # 給驅動收尾，避免連續切換時崩潰
     except Exception as e:
         print("❌ 播放失敗：", e)
         sd.stop()
 
-# ===== 主流程 =====
+# ============ 主流程 ============
 if __name__ == "__main__":
-    print(f"🤖 智慧機器人（穩定自動格式版）啟動完成！說出「{WAKE_WORD}」喚醒我。")
+    # 啟動先載入你提供的喚醒音檔
+    prepare_wake_confirm()
 
+    print(f"🤖 智慧機器人（喚醒音檔版）啟動完成！說出「{WAKE_WORD}」喚醒我。")
     while True:
         try:
+            # 1) 等待喚醒
             wake_audio = record_until_silence(SILENCE_TIMEOUT_WAKE)
             if wake_audio is None:
                 continue
             save_wav(WAKE_WAV, wake_audio)
-            wake_text = transcribe_np_int16(wake_audio, lang="zh")
+            wake_text = transcribe_np_int16(wake_audio, lang="zh")  # 喚醒段固定用中文較穩
             print("🗣️ 喚醒辨識：", wake_text)
-            if WAKE_WORD not in wake_text:
+
+            if not has_wake_word(wake_text):
                 print("💤 未偵測到喚醒詞，持續監聽…\n")
                 continue
 
+            # 2) 喚醒成功：播放你自備的喚醒音檔
+            play_wake_confirm()
+
+            # 3) 主講階段
             print("✅ 喚醒成功！請開始說話…")
             main_audio = record_until_silence(SILENCE_TIMEOUT_MAIN)
             if main_audio is None:
@@ -169,12 +230,14 @@ if __name__ == "__main__":
                 continue
             save_wav(INPUT_WAV, main_audio)
 
+            # （可選）預覽轉文字
             try:
-                preview = transcribe_np_int16(main_audio)
+                preview = transcribe_np_int16(main_audio, lang=None)
                 print("📝 主講轉文字（預覽）：", preview)
             except Exception as e:
                 print("（預覽轉文字失敗，不影響上傳）", e)
 
+            # 4) 送 n8n，播放回覆，回到待命
             reply_path = send_to_n8n(INPUT_WAV)
             play_audio_any(reply_path)
             print(f"🔁 回到待命狀態…（說『{WAKE_WORD}』可再次喚醒）\n")
