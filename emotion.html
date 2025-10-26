@@ -2,19 +2,19 @@
 <html lang="zh-TW">
 <head>
   <meta charset="UTF-8" />
-  <title>🎧 永遠監聽語音情緒分析系統 (含紀錄+文字顯示)</title>
+  <title>🎧 永遠監聽語音情緒分析系統 (穩定版)</title>
   <style>
-    body { 
-      font-family: "Microsoft JhengHei", sans-serif; 
-      text-align: center; 
-      margin-top: 40px; 
+    body {
+      font-family: "Microsoft JhengHei", sans-serif;
+      text-align: center;
+      margin-top: 40px;
       background: #fafafa;
     }
-    input, button { 
-      padding: 8px; 
-      margin: 5px; 
-      width: 280px; 
-      font-size: 16px; 
+    input, button {
+      padding: 8px;
+      margin: 5px;
+      width: 280px;
+      font-size: 16px;
     }
     #status { margin-top: 20px; font-size: 18px; color: #333; }
     #emotionLight {
@@ -38,10 +38,7 @@
       overflow-y: auto;
       max-height: 350px;
     }
-    .logItem {
-      border-bottom: 1px solid #ddd;
-      padding: 8px 0;
-    }
+    .logItem { border-bottom: 1px solid #ddd; padding: 8px 0; }
     .emotionTag { font-weight: bold; margin-right: 6px; }
     .userText { color: #000; font-style: italic; margin: 5px 0; display: block; }
     .adviceText { color: #d33; margin-top: 3px; display: block; }
@@ -64,9 +61,10 @@
     let mediaRecorder;
     let audioChunks = [];
     let running = false;
-    let logs = []; // 儲存最新五次紀錄
+    let isUploading = false;
+    let logs = [];
 
-    // 啟動監聽
+    // 🟢 啟動監聽
     async function startListening() {
       n8nUrl = document.getElementById("webhookUrl").value.trim();
       if (!n8nUrl) return alert("請輸入 n8n Webhook URL！");
@@ -76,7 +74,7 @@
       detectSilenceLoop();
     }
 
-    // 停止監聽
+    // 🔴 停止監聽
     function stopListening() {
       running = false;
       if (micStream) micStream.getTracks().forEach(t => t.stop());
@@ -85,7 +83,7 @@
       showEmotion("中立");
     }
 
-    // 初始化麥克風
+    // 🎤 初始化麥克風
     async function initMic() {
       micStream = await navigator.mediaDevices.getUserMedia({ audio: true });
       audioCtx = new AudioContext();
@@ -95,7 +93,7 @@
       source.connect(analyser);
     }
 
-    // 持續偵測音量變化
+    // 🔍 偵測音量變化
     async function detectSilenceLoop() {
       const buffer = new Uint8Array(analyser.fftSize);
       let lastVoice = 0;
@@ -105,26 +103,27 @@
         if (!running) return;
         analyser.getByteTimeDomainData(buffer);
         const max = Math.max(...buffer.map(v => Math.abs(v - 128)));
-
         const now = audioCtx.currentTime;
-        if (max > 15) {
-          if (!recording) {
+
+        if (max > 30) { // ← 提高閾值避免呼吸聲誤觸
+          if (!recording && !isUploading) {
             console.log("🗣️ 偵測到人聲，開始錄音");
             startRecording();
             recording = true;
           }
           lastVoice = now;
-        } else if (recording && now - lastVoice > 3) {
-          console.log("🛑 3 秒無聲，自動結束錄音");
+        } else if (recording && now - lastVoice > 2) { // ← 改 2 秒靜音結束
+          console.log("🛑 偵測到靜音，自動結束錄音");
           stopRecording();
           recording = false;
         }
+
         requestAnimationFrame(loop);
       };
       loop();
     }
 
-    // 錄音開始
+    // 🎙️ 錄音開始
     async function startRecording() {
       audioChunks = [];
       mediaRecorder = new MediaRecorder(micStream);
@@ -134,7 +133,7 @@
       document.getElementById("status").innerText = "🎙️ 錄音中...";
     }
 
-    // 錄音結束後上傳
+    // ⏹️ 錄音結束
     async function stopRecording() {
       if (mediaRecorder && mediaRecorder.state === "recording") {
         mediaRecorder.stop();
@@ -142,36 +141,53 @@
       }
     }
 
-    // 上傳至 n8n
+    // 📡 傳送到 n8n
     async function sendToN8n() {
+      if (isUploading) {
+        console.warn("⚠️ 上次上傳未完成，跳過這次。");
+        return;
+      }
+      isUploading = true;
+
       const blob = new Blob(audioChunks, { type: "audio/webm" });
+      if (blob.size < 5000) { // ← 小於5KB當雜音忽略
+        console.log("🔇 音訊太短，略過。");
+        isUploading = false;
+        return;
+      }
+
       const formData = new FormData();
       formData.append("audio_file", blob, "voice.webm");
 
       try {
         const res = await fetch(n8nUrl, { method: "POST", body: formData });
-        const contentType = res.headers.get("content-type");
-        if (contentType && contentType.includes("application/json")) {
-          const result = await res.json();
-          console.log("📊 收到分析結果：", result);
+        const textRes = await res.text();
+        let result = null;
+
+        try {
+          result = JSON.parse(textRes);
+        } catch {
+          console.warn("⚠️ 回傳不是合法 JSON：", textRes);
+        }
+
+        if (result) {
           showEmotion(result.emotion);
           document.getElementById("status").innerText =
             `🧠 ${result.emotion} ｜ ${result.tone || ""}`;
           addLog(result);
         } else {
-          console.warn("⚠️ 未收到 JSON 格式回覆");
-          showEmotion("中立");
+          console.warn("⚠️ 未收到正確資料");
         }
       } catch (err) {
-        console.error("❌ 上傳或分析發生錯誤：", err);
-        document.getElementById("status").innerText = "❌ 傳送失敗";
-        showEmotion("中立");
+        console.error("❌ 傳送或分析失敗：", err);
+        document.getElementById("status").innerText = "❌ 上傳失敗";
       } finally {
-        if (running) detectSilenceLoop(); // 持續循環
+        isUploading = false;
+        if (running) detectSilenceLoop();
       }
     }
 
-    // 顯示情緒燈號
+    // 💡 顯示情緒燈號
     function showEmotion(emotion) {
       const light = document.getElementById("emotionLight");
       const map = {
@@ -188,7 +204,7 @@
       light.style.boxShadow = `0 0 25px ${color}`;
     }
 
-    // 新增歷史紀錄
+    // 📋 新增紀錄
     function addLog(result) {
       const container = document.getElementById("logContainer");
       const log = {
@@ -211,7 +227,7 @@
       `).join("");
     }
 
-    // 綁定按鈕
+    // 🔗 綁定按鈕
     window.addEventListener("DOMContentLoaded", () => {
       document.getElementById("startBtn").addEventListener("click", startListening);
       document.getElementById("stopBtn").addEventListener("click", stopListening);
