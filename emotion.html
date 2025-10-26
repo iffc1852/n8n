@@ -14,7 +14,7 @@
     #logContainer {
       width: 90%; max-width: 760px; margin: 16px auto; text-align: left;
       background: #fff; border-radius: 12px; box-shadow: 0 0 10px rgba(0,0,0,.08);
-      padding: 12px 14px; font-size: 15px; max-height: 420px; overflow-y: auto;
+      padding: 12px 14px; font-size: 15px; max-height: 70vh; overflow-y: auto;
     }
     .logItem { border-bottom: 1px solid #eee; padding: 10px 2px; }
     .logItem:last-child { border-bottom: none; }
@@ -248,7 +248,7 @@
     function addLog(entry) {
       // 只保留 5 筆
       logs.unshift({ time: new Date().toLocaleTimeString(), ...entry });
-      if (logs.length > 5) logs.pop();
+      if (logs.length > 10) logs.pop();
 
       // 燈泡彩色圖示（用字色上色）
       const bulb = (emo) => {
@@ -260,7 +260,7 @@
         <div class="logItem">
           <div>🕒 ${l.time}</div>
           <span class="userText">🗣️ 你說：「${escapeHtml(l.text)}」</span>
-          <div class="emotionLine">💭 情緒：<b>${l.emotion}</b> ${bulb(l.emotion)}　<span>${l.tone}</span></div>
+          <div class="emotionLine">💭 情緒：<b>${l.emotion}</b>　<span>${l.tone}</span></div>
           <span class="adviceText">💡 ${escapeHtml(l.advice)}</span>
         </div>
       `).join("");
