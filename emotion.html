@@ -2,7 +2,7 @@
 <html lang="zh-TW">
 <head>
   <meta charset="UTF-8" />
-  <title>🎧 永遠監聽語音情緒分析系統 (含紀錄)</title>
+  <title>🎧 永遠監聽語音情緒分析系統 (含紀錄+文字顯示)</title>
   <style>
     body { 
       font-family: "Microsoft JhengHei", sans-serif; 
@@ -26,8 +26,8 @@
       transition: background 0.4s, box-shadow 0.4s;
     }
     #logContainer {
-      width: 80%;
-      max-width: 600px;
+      width: 85%;
+      max-width: 700px;
       margin: 20px auto;
       text-align: left;
       background: white;
@@ -36,16 +36,15 @@
       padding: 10px 15px;
       font-size: 15px;
       overflow-y: auto;
-      max-height: 300px;
+      max-height: 350px;
     }
     .logItem {
       border-bottom: 1px solid #ddd;
       padding: 8px 0;
     }
-    .emotionTag {
-      font-weight: bold;
-      margin-right: 6px;
-    }
+    .emotionTag { font-weight: bold; margin-right: 6px; }
+    .userText { color: #000; font-style: italic; margin: 5px 0; display: block; }
+    .adviceText { color: #d33; margin-top: 3px; display: block; }
   </style>
 </head>
 <body>
@@ -194,6 +193,7 @@
       const container = document.getElementById("logContainer");
       const log = {
         time: new Date().toLocaleTimeString(),
+        text: result.text || "（未取得文字）",
         emotion: result.emotion || "未知",
         tone: result.tone || "",
         advice: result.advice || ""
@@ -203,9 +203,10 @@
 
       container.innerHTML = logs.map(l => `
         <div class="logItem">
-          <span class="emotionTag">🕒 ${l.time}</span> 
-          <span>情緒：<b>${l.emotion}</b> (${l.tone})</span><br>
-          <span style="color:#d33;">${l.advice}</span>
+          <span class="emotionTag">🕒 ${l.time}</span><br>
+          <span class="userText">🗣️ 你說：「${l.text}」</span>
+          <span>💭 情緒：<b>${l.emotion}</b> (${l.tone})</span><br>
+          <span class="adviceText">💡 ${l.advice}</span>
         </div>
       `).join("");
     }
@@ -218,4 +219,3 @@
   </script>
 </body>
 </html>
-
