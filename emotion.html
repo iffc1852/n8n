@@ -2,275 +2,173 @@
 <html lang="zh-TW">
 <head>
   <meta charset="UTF-8" />
-  <title>🎧 永遠監聽語音情緒分析（穩定強化版）</title>
+  <title>🎧 語音情緒監聽（可下載完整文字）</title>
   <style>
-    body { font-family: "Microsoft JhengHei", sans-serif; text-align: center; margin: 28px auto; background: #fafafa; }
-    input, button { padding: 8px; margin: 5px; width: 280px; font-size: 16px; }
-    #status { margin-top: 8px; font-size: 16px; color: #333; min-height: 24px; }
-    #emotionLight {
-      width: 90px; height: 90px; border-radius: 50%; margin: 14px auto 8px;
-      background: gray; box-shadow: 0 0 18px rgba(0,0,0,0.25); transition: background .25s, box-shadow .25s;
-    }
-    #logContainer {
-      width: 90%; max-width: 760px; margin: 16px auto; text-align: left;
-      background: #fff; border-radius: 12px; box-shadow: 0 0 10px rgba(0,0,0,.08);
-      padding: 12px 14px; font-size: 15px; max-height: 70vh; overflow-y: auto;
-    }
-    .logItem { border-bottom: 1px solid #eee; padding: 10px 2px; }
-    .logItem:last-child { border-bottom: none; }
-    .emotionLine b { margin-right: 6px; }
-    .userText { color: #000; font-style: italic; margin: 4px 0 6px; display: block; }
-    .adviceText { color: #c0392b; margin-top: 3px; display: block; }
-    .btnRow { margin-top: 6px; }
+    body { font-family:"Microsoft JhengHei",sans-serif;text-align:center;margin:28px auto;background:#fafafa;}
+    input,button{padding:8px;margin:5px;width:280px;font-size:16px;}
+    #status{margin-top:8px;font-size:16px;color:#333;min-height:24px;}
+    #emotionLight{width:90px;height:90px;border-radius:50%;margin:14px auto 8px;
+      background:gray;box-shadow:0 0 18px rgba(0,0,0,0.25);transition:background .25s,box-shadow .25s;}
+    #logContainer{width:90%;max-width:760px;margin:16px auto;text-align:left;
+      background:#fff;border-radius:12px;box-shadow:0 0 10px rgba(0,0,0,.08);
+      padding:12px 14px;font-size:15px;}
+    .logItem{border-bottom:1px solid #eee;padding:8px 2px;}
+    .logItem:last-child{border-bottom:none;}
+    .userText{color:#000;font-style:italic;margin:4px 0 6px;display:block;}
+    .adviceText{color:#c0392b;margin-top:3px;display:block;}
   </style>
 </head>
 <body>
-  <h2>🤖 永遠監聽語音情緒分析</h2>
-  <input id="webhookUrl" placeholder="n8n Webhook URL" /><br>
-  <div class="btnRow">
+  <h2>🤖 語音情緒監聽系統</h2>
+  <input id="webhookUrl" placeholder="n8n Webhook URL"/><br>
+  <div>
     <button id="startBtn">🚀 開始監聽</button>
     <button id="stopBtn">🛑 停止監聽</button>
+    <button id="downloadBtn">📄 下載全部文字</button>
   </div>
 
   <div id="emotionLight"></div>
   <div id="status">尚未啟動</div>
-
   <div id="logContainer"></div>
 
   <script>
-    // ===== 狀態變數 =====
-    let n8nUrl = "";
-    let audioCtx, analyser, micStream;
-    let mediaRecorder;
-    let audioChunks = [];
-    let running = false;           // 是否處於監聽模式
-    let isUploading = false;       // 上傳鎖：避免同時上傳
-    let isRecording = false;       // 是否正在錄音
-    let cooldownUntil = 0;         // 冷卻結束時間（避免剛停就又觸發）
-    let silenceStopper = null;     // 停止偵測的函數
-    let recordStartTime = 0;       // 錄音開始時間（最短時長判斷）
-    const logs = [];               // 最近五筆
+    let n8nUrl="",audioCtx,analyser,micStream,mediaRecorder;
+    let audioChunks=[],running=false,isUploading=false,isRecording=false;
+    let cooldownUntil=0,silenceStopper=null,recordStartTime=0;
+    const logs=[],allLogs=[];
+    const $status=document.getElementById("status"),$log=document.getElementById("logContainer");
+    const EMO_COLORS={
+      "高興":"#FFC107","悲傷":"#1E90FF","生氣":"#FF3B30","不耐煩":"#8E44AD",
+      "諷刺":"#FF8C00","平靜":"#2ECC71","中立":"#27AE60"};
 
-    // ===== UI 元素 =====
-    const $status = document.getElementById("status");
-    const $log = document.getElementById("logContainer");
-
-    // ===== 情緒顏色對照 =====
-    const EMO_COLORS = {
-      "高興": "#FFC107",   // 黃金
-      "悲傷": "#1E90FF",   // 藍
-      "生氣": "#FF3B30",   // 紅
-      "不耐煩": "#8E44AD", // 紫
-      "諷刺": "#FF8C00",   // 橘
-      "平靜": "#2ECC71",   // 綠
-      "中立": "#27AE60"    // 深綠
-    };
-
-    // ===== 事件綁定 =====
-    window.addEventListener("DOMContentLoaded", () => {
-      document.getElementById("startBtn").addEventListener("click", startListening);
-      document.getElementById("stopBtn").addEventListener("click", stopListening);
+    window.addEventListener("DOMContentLoaded",()=>{
+      document.getElementById("startBtn").addEventListener("click",startListening);
+      document.getElementById("stopBtn").addEventListener("click",stopListening);
+      document.getElementById("downloadBtn").addEventListener("click",downloadAll);
     });
 
-    // ===== 主要流程 =====
-    async function startListening() {
-      if (running) return;
-      n8nUrl = document.getElementById("webhookUrl").value.trim();
-      if (!n8nUrl) return alert("請輸入 n8n Webhook URL！");
-      try {
+    async function startListening(){
+      if(running)return;
+      n8nUrl=document.getElementById("webhookUrl").value.trim();
+      if(!n8nUrl)return alert("請輸入 n8n Webhook URL！");
+      try{
         await initMic();
-        running = true;
-        $status.textContent = "🎧 麥克風監聽中...";
-        startSilenceDetect(); // 開始偵測聲音
-      } catch (e) {
-        $status.textContent = "❌ 無法啟用麥克風：" + e?.message;
-      }
+        running=true;
+        $status.textContent="🎧 麥克風監聽中...";
+        startSilenceDetect();
+      }catch(e){$status.textContent="❌ 無法啟用麥克風："+e?.message;}
     }
 
-    async function stopListening() {
-      // 進入冷卻期：避免關閉的瞬間又抓到殘留音訊
-      cooldownUntil = performance.now() + 1200; // 1.2 秒冷卻
-      running = false;
-
-      // 停止偵測 loop
-      if (silenceStopper) silenceStopper();
-      silenceStopper = null;
-
-      // 若正在錄音，先結束錄音（結束後不自動重開偵測）
-      if (mediaRecorder && mediaRecorder.state === "recording") {
-        try { mediaRecorder.stop(); } catch {}
-      }
-
-      // 關閉音訊串流 & AudioContext
-      if (micStream) { micStream.getTracks().forEach(t => t.stop()); micStream = null; }
-      if (audioCtx && audioCtx.state !== "closed") { try { await audioCtx.close(); } catch {} audioCtx = null; }
-
-      isRecording = false;
-      $status.textContent = "🛑 已停止監聽";
-      showEmotion("中立");
+    async function stopListening(){
+      cooldownUntil=performance.now()+1200;
+      running=false;
+      if(silenceStopper)silenceStopper(),silenceStopper=null;
+      if(mediaRecorder&&mediaRecorder.state==="recording")try{mediaRecorder.stop();}catch{}
+      if(micStream){micStream.getTracks().forEach(t=>t.stop());micStream=null;}
+      if(audioCtx&&audioCtx.state!=="closed"){try{await audioCtx.close();}catch{}audioCtx=null;}
+      isRecording=false;$status.textContent="🛑 已停止監聽";showEmotion("中立");
     }
 
-    async function initMic() {
-      micStream = await navigator.mediaDevices.getUserMedia({ audio: true });
-      audioCtx = new (window.AudioContext || window.webkitAudioContext)();
-      const source = audioCtx.createMediaStreamSource(micStream);
-      analyser = audioCtx.createAnalyser();
-      analyser.fftSize = 2048;
-      source.connect(analyser);
+    async function initMic(){
+      micStream=await navigator.mediaDevices.getUserMedia({
+        audio:{channelCount:1,sampleRate:48000,noiseSuppression:true,echoCancellation:true,autoGainControl:true}});
+      audioCtx=new(window.AudioContext||window.webkitAudioContext)();
+      const source=audioCtx.createMediaStreamSource(micStream);
+      analyser=audioCtx.createAnalyser();analyser.fftSize=2048;source.connect(analyser);
     }
 
-    function startSilenceDetect() {
-      const buffer = new Uint8Array(analyser.fftSize);
-      let lastVoiceTime = 0;
-      let rafId = 0;
-      let stopped = false;
-
-      const VOICE_THRESHOLD = 32;   // << 提高門檻，降低呼吸聲誤觸
-      const SILENCE_SEC = 1.8;      // << 無聲持續多久視為一句結束
-      const MIN_MS = 800;           // << 最短有效語音 0.8s
-      const MIN_SIZE = 6000;        // << 檔案小於 6KB 視為雜音
-
-      // 錄音控制
-      function startRecording() {
-        if (isRecording || isUploading) return;
-        audioChunks = [];
-        mediaRecorder = new MediaRecorder(micStream);
-        mediaRecorder.ondataavailable = (e) => { if (e.data.size > 0) audioChunks.push(e.data); };
-        mediaRecorder.onstop = () => uploadIfValid(MIN_MS, MIN_SIZE);
-        recordStartTime = performance.now();
-        mediaRecorder.start();
-        isRecording = true;
-        $status.textContent = "🎙️ 錄音中...";
+    function startSilenceDetect(){
+      const buffer=new Uint8Array(analyser.fftSize);
+      let lastVoiceTime=0,rafId=0,stopped=false;
+      const VOICE_THRESHOLD=45,SILENCE_SEC=2.5,MIN_MS=1200,MIN_SIZE=12000;
+      function startRecording(){
+        if(isRecording||isUploading)return;
+        audioChunks=[];mediaRecorder=new MediaRecorder(micStream);
+        mediaRecorder.ondataavailable=e=>{if(e.data.size>0)audioChunks.push(e.data);};
+        mediaRecorder.onstop=()=>uploadIfValid(MIN_MS,MIN_SIZE);
+        recordStartTime=performance.now();mediaRecorder.start();
+        isRecording=true;$status.textContent="🎙️ 錄音中...";
       }
-
-      async function stopRecording() {
-        if (!isRecording) return;
-        try {
-          mediaRecorder.stop();
-          $status.textContent = "📤 傳送錄音中...";
-        } catch {}
-        isRecording = false;
+      async function stopRecording(){
+        if(!isRecording)return;
+        try{mediaRecorder.stop();$status.textContent="📤 傳送錄音中...";}catch{}
+        isRecording=false;
       }
-
-      async function uploadIfValid(minDurationMs, minSize) {
-        // 若已停止整體監聽且還在冷卻，就直接丟棄
-        if (!running && performance.now() < cooldownUntil) return;
-
-        const duration = performance.now() - recordStartTime;
-        const blob = new Blob(audioChunks, { type: "audio/webm" });
-        if (duration < minDurationMs || blob.size < minSize) {
-          console.log("🔇 略過短雜音：", { duration, size: blob.size });
-          if (running && !stopped) loop(); // 回到偵測
-          return;
-        }
-        await sendToN8n(blob);
-        if (running && !stopped) loop(); // 完成後回到偵測
+      async function uploadIfValid(minDur,minSize){
+        if(!running&&performance.now()<cooldownUntil)return;
+        const dur=performance.now()-recordStartTime;
+        const blob=new Blob(audioChunks,{type:"audio/webm"});
+        if(dur<minDur||blob.size<minSize){if(running&&!stopped)loop();return;}
+        await sendToN8n(blob);if(running&&!stopped)loop();
       }
-
-      function loop() {
-        if (stopped || !running) return;
+      function loop(){
+        if(stopped||!running)return;
         analyser.getByteTimeDomainData(buffer);
-        const now = audioCtx.currentTime;
-        // 取最大偏移量（0-255 -> 中心 128）
-        let max = 0;
-        for (let i = 0; i < buffer.length; i++) {
-          const amp = Math.abs(buffer[i] - 128);
-          if (amp > max) max = amp;
+        const now=audioCtx.currentTime;
+        let max=0;for(let i=0;i<buffer.length;i++){const a=Math.abs(buffer[i]-128);if(a>max)max=a;}
+        if(max>VOICE_THRESHOLD&&performance.now()>cooldownUntil){
+          lastVoiceTime=now;if(!isRecording&&!isUploading)startRecording();
+        }else if(isRecording){
+          const silentFor=now-lastVoiceTime;
+          if(silentFor>=SILENCE_SEC+0.3)stopRecording();
         }
-
-        if (max > VOICE_THRESHOLD && performance.now() > cooldownUntil) {
-          // 偵測到人聲
-          lastVoiceTime = now;
-          if (!isRecording && !isUploading) startRecording();
-        } else if (isRecording) {
-          const silentFor = now - lastVoiceTime;
-          if (silentFor >= SILENCE_SEC) {
-            stopRecording();
-          }
-        }
-
-        rafId = requestAnimationFrame(loop);
+        rafId=requestAnimationFrame(loop);
       }
-
-      loop();
-
-      // 回傳停止函式
-      silenceStopper = () => {
-        stopped = true;
-        if (rafId) cancelAnimationFrame(rafId);
-      };
+      loop();silenceStopper=()=>{stopped=true;if(rafId)cancelAnimationFrame(rafId);};
     }
 
-    async function sendToN8n(blob) {
-      if (isUploading) return;
-      isUploading = true;
-
-      try {
-        const formData = new FormData();
-        formData.append("audio_file", blob, "voice.webm");
-
-        const res = await fetch(n8nUrl, { method: "POST", body: formData });
-        const raw = await res.text();
-
-        // 解析為 JSON（防止回傳含換行/字串化 JSON）
-        let result = null;
-        try { result = JSON.parse(raw); } catch { console.warn("⚠️ 非 JSON 回傳：", raw); }
-
-        if (result) {
-          // 更新燈號 + 紀錄
+    async function sendToN8n(blob){
+      if(isUploading)return;isUploading=true;
+      try{
+        const formData=new FormData();formData.append("audio_file",blob,"voice.webm");
+        const res=await fetch(n8nUrl,{method:"POST",body:formData});
+        const raw=await res.text();let result=null;try{result=JSON.parse(raw);}catch{}
+        if(result){
           showEmotion(result.emotion);
-          addLog({
-            text: result.text || "（未取得文字）",
-            emotion: result.emotion || "未知",
-            tone: result.tone || "",
-            advice: result.advice || ""
-          });
-          $status.textContent = `🧠 ${result.emotion || "未知"} ｜ ${result.tone || ""}`;
-        } else {
-          $status.textContent = "⚠️ 未收到有效結果";
-        }
-      } catch (e) {
-        console.error("❌ 上傳/分析失敗：", e);
-        $status.textContent = "❌ 上傳失敗";
-      } finally {
-        isUploading = false;
-      }
+          addLog({text:result.text||"（未取得文字）",emotion:result.emotion||"未知",
+                  tone:result.tone||"",advice:result.advice||""});
+          $status.textContent=`🧠 ${result.emotion||"未知"}｜${result.tone||""}`;
+        }else{$status.textContent="⚠️ 未收到有效結果";}
+      }catch(e){console.error("❌ 上傳失敗",e);$status.textContent="❌ 上傳失敗";}
+      finally{isUploading=false;}
     }
 
-    // ===== UI：燈號 + 紀錄 =====
-    function showEmotion(emotion) {
-      const light = document.getElementById("emotionLight");
-      const color = EMO_COLORS[emotion] || "gray";
-      light.style.background = color;
-      light.style.boxShadow = `0 0 25px ${color}`;
+    function showEmotion(emotion){
+      const light=document.getElementById("emotionLight");
+      const color=EMO_COLORS[emotion]||"gray";
+      light.style.background=color;light.style.boxShadow=`0 0 25px ${color}`;
     }
 
-    function addLog(entry) {
-      // 只保留 5 筆
-      logs.unshift({ time: new Date().toLocaleTimeString(), ...entry });
-      if (logs.length > 10) logs.pop();
-
-      // 燈泡彩色圖示（用字色上色）
-      const bulb = (emo) => {
-        const c = EMO_COLORS[emo] || "#999";
-        return `<span style="color:${c}">💡</span>`;
-      };
-
-      $log.innerHTML = logs.map(l => `
+    function addLog(entry){
+      const record={time:new Date().toLocaleTimeString(),...entry};
+      logs.unshift(record);allLogs.push(record);
+      if(logs.length>10)logs.pop();
+      $log.innerHTML=logs.map(l=>`
         <div class="logItem">
           <div>🕒 ${l.time}</div>
           <span class="userText">🗣️ 你說：「${escapeHtml(l.text)}」</span>
-          <div class="emotionLine">💭 情緒：<b>${l.emotion}</b>　<span>${l.tone}</span></div>
-          <span class="adviceText">💡 ${escapeHtml(l.advice)}</span>
-        </div>
-      `).join("");
+          <div>💭 情緒：<b>${l.emotion}</b>　<span>${l.tone}</span></div>
+          <span class="adviceText">${escapeHtml(l.advice)}</span>
+        </div>`).join("");
     }
 
-    // 簡單避免 XSS
-    function escapeHtml(str) {
-      return String(str || "")
-        .replace(/&/g,"&amp;").replace(/</g,"&lt;")
+    function escapeHtml(str){
+      return String(str||"").replace(/&/g,"&amp;").replace(/</g,"&lt;")
         .replace(/>/g,"&gt;").replace(/"/g,"&quot;").replace(/'/g,"&#039;");
+    }
+
+    // ===== 下載全部文字 =====
+    function downloadAll(){
+      if(allLogs.length===0){alert("目前沒有任何紀錄。");return;}
+      const content=allLogs.map(l=>
+        `🕒 ${l.time}\n🗣️ 你說：「${l.text}」\n💭 情緒：${l.emotion}\n🎧 語氣：${l.tone}\n💡 建議：${l.advice}\n\n`
+      ).join("");
+      const blob=new Blob([content],{type:"text/plain;charset=utf-8"});
+      const url=URL.createObjectURL(blob);
+      const a=document.createElement("a");
+      a.href=url;
+      const now=new Date().toLocaleString("zh-TW").replace(/[\/\s:]/g,"-");
+      a.download=`語音紀錄_${now}.txt`;a.click();URL.revokeObjectURL(url);
     }
   </script>
 </body>
