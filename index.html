@@ -4,343 +4,315 @@
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>AI 多模態助理 (現代美化版)</title>
+    <link href="https://fonts.googleapis.com/css2?family=Noto+Sans+TC:wght@400;500;700&display=swap" rel="stylesheet">
     <style>
         /* --- 1. 全局基礎設定 (Modern Reset) --- */
+        :root {
+            --bg-gradient: linear-gradient(135deg, #f6f8fd 0%, #eef2f3 100%);
+            --card-bg: #ffffff;
+            --primary-color: #4361ee;
+            --accent-color: #3f37c9;
+            --text-main: #2b2d42;
+            --text-sub: #8d99ae;
+            --shadow-soft: 0 10px 30px -10px rgba(0,0,0,0.08);
+            --shadow-hover: 0 20px 40px -10px rgba(0,0,0,0.12);
+            --radius-main: 24px;
+            --radius-sub: 16px;
+        }
+
         body { 
-            font-family: 'PingFang TC', 'Microsoft JhengHei', 'Segoe UI', sans-serif;
+            font-family: 'Noto Sans TC', 'Segoe UI', sans-serif;
             margin: 0; padding: 0; 
-            background: linear-gradient(135deg, #f5f7fa 0%, #c3cfe2 100%); /* 柔和背景 */
+            background: var(--bg-gradient);
             height: 100vh; 
             display: flex;
             justify-content: center;
             align-items: center;
-            color: #444;
+            color: var(--text-main);
+            overflow: hidden;
         }
 
-        /* --- 2. 主容器：現代化卡片 --- */
+        /* --- 2. 主容器：懸浮卡片風格 --- */
         .main-container {
-            width: 1100px;
-            max-width: 96vw;
+            width: 1200px;
+            max-width: 95vw;
             height: 90vh;
-            background-color: rgba(255, 255, 255, 0.95);
-            backdrop-filter: blur(10px); /* 毛玻璃效果 */
-            border-radius: 24px;
-            box-shadow: 0 20px 60px rgba(0,0,0,0.15); /* 深邃陰影 */
+            background-color: var(--card-bg);
+            border-radius: var(--radius-main);
+            box-shadow: var(--shadow-soft);
             display: grid;
-            grid-template-columns: 350px 1fr; /* 左固定寬，右自適應 */
-            gap: 0; /* 用內距控制 */
+            grid-template-columns: 350px 1fr; /* 左側固定寬度，右側自適應 */
+            gap: 0; /* 移除間隙，改用邊框分隔 */
             overflow: hidden;
             position: relative;
         }
 
-        /* --- 頂部隱藏設定列 --- */
+        /* --- 頂部設定列 (滑鼠靠近顯示) --- */
         .connection-bar {
             position: absolute;
-            top: 0; left: 0; width: 100%;
-            background: rgba(30, 30, 40, 0.95);
-            padding: 8px;
-            text-align: center;
-            z-index: 999;
-            display: flex;
-            justify-content: center;
-            align-items: center;
-            gap: 10px;
-            transform: translateY(-90%);
-            transition: transform 0.3s ease-in-out;
-            box-shadow: 0 4px 10px rgba(0,0,0,0.2);
+            top: 20px; left: 50%; transform: translateX(-50%) translateY(-150%);
+            background: rgba(255,255,255,0.95);
+            padding: 10px 20px;
+            border-radius: 50px;
+            box-shadow: 0 4px 15px rgba(0,0,0,0.1);
+            z-index: 1000;
+            display: flex; gap: 10px; align-items: center;
+            transition: transform 0.4s cubic-bezier(0.34, 1.56, 0.64, 1);
+            border: 1px solid #eee;
         }
-        .connection-bar:hover { transform: translateY(0); }
-        .connection-bar span { color: #fff; font-size: 0.9em; font-weight: bold; }
-        .connection-bar input { padding: 6px 12px; border-radius: 20px; border:none; width: 250px; outline: none;}
-        .connection-bar button { 
-            cursor: pointer; background: #4facfe; color: white; border: none; 
-            padding: 6px 15px; border-radius: 20px; font-weight: bold; 
-            transition: background 0.2s;
-        }
-        .connection-bar button:hover { background: #00f2fe; }
+        .main-container:hover .connection-bar { transform: translateX(-50%) translateY(0); } /* 滑鼠移入主畫面就顯示 */
+        
+        .connection-bar input { padding: 8px 15px; border-radius: 20px; border: 1px solid #ddd; outline:none; width: 250px; background: #f9f9f9;}
+        .connection-bar button { cursor: pointer; background: var(--primary-color); color: white; border: none; padding: 8px 20px; border-radius: 20px; font-weight: bold; transition: 0.2s;}
+        .connection-bar button:hover { background: var(--accent-color); }
 
-        /* 標題樣式 */
+        /* --- 通用標題 --- */
         h3 {
             margin: 0 0 15px 0;
-            font-size: 1em;
-            color: #888;
+            font-size: 1rem;
+            color: var(--text-sub);
             text-transform: uppercase;
             letter-spacing: 1px;
             font-weight: 700;
-            border-bottom: 2px solid #f0f0f0;
-            padding-bottom: 8px;
+            display: flex; align-items: center; gap: 8px;
         }
 
-        /* ================= 左側欄 (Sidebar / User) ================= */
+        /* ================= 左側區域 (使用者輸入 - 深色側欄感) ================= */
         .left-column {
-            background-color: #fff;
-            border-right: 1px solid #eee;
+            background-color: #f8f9fa; /* 淺灰背景 */
             padding: 30px;
             display: flex;
             flex-direction: column;
             gap: 25px;
+            border-right: 1px solid #edf2f7;
         }
 
-        /* 視訊預覽框 */
-        .video-box {
-            position: relative;
-            background: #000;
-            border-radius: 16px;
+        /* 1. 視訊鏡頭區 */
+        .video-wrapper {
+            background: white;
+            padding: 10px;
+            border-radius: var(--radius-sub);
+            box-shadow: 0 4px 10px rgba(0,0,0,0.03);
+            border: 1px solid #eee;
+            text-align: center;
+        }
+        #camera-preview {
+            width: 100%;
+            height: 200px;
+            background-color: #2b2d42;
+            border-radius: 12px;
             overflow: hidden;
-            box-shadow: 0 8px 20px rgba(0,0,0,0.1);
-            aspect-ratio: 4/3;
+            position: relative;
         }
-        #camera-preview { width: 100%; height: 100%; background: #222; }
-        #camera-preview video { width: 100%; height: 100%; object-fit: cover; transform: scaleX(-1); opacity: 0.9;}
+        #camera-preview video { width: 100%; height: 100%; object-fit: cover; transform: scaleX(-1); opacity: 0.9; }
 
-        /* 錄音按鈕 (浮在視訊框下面) */
+        /* 錄音按鈕 (現代化按鈕) */
         #record-button {
             width: 100%;
-            margin-top: 10px;
+            margin-top: 15px;
             padding: 12px;
             border-radius: 12px;
             border: none;
             font-weight: 600;
+            font-size: 0.95rem;
             cursor: pointer;
             transition: all 0.3s ease;
-            display: flex;
-            align-items: center;
-            justify-content: center;
-            gap: 8px;
-            box-shadow: 0 4px 10px rgba(0,0,0,0.05);
+            display: flex; justify-content: center; align-items: center; gap: 8px;
         }
-        .btn-idle { background: linear-gradient(to right, #e0eafc, #cfdef3); color: #555; }
+        .btn-idle { background-color: white; color: var(--text-main); border: 2px solid #eef2f3 !important; box-shadow: 0 2px 5px rgba(0,0,0,0.02); }
+        .btn-idle:hover { border-color: var(--primary-color) !important; color: var(--primary-color); }
+        
         .btn-recording { 
-            background: linear-gradient(to right, #ff9a9e, #fecfef); 
-            color: #d63384; 
-            box-shadow: 0 0 15px rgba(255, 65, 108, 0.4);
-            animation: pulse 1.5s infinite;
+            background: linear-gradient(135deg, #ff6b6b 0%, #ee5253 100%); 
+            color: white; 
+            border: none !important;
+            box-shadow: 0 4px 15px rgba(238, 82, 83, 0.3);
+            animation: pulse-red 1.5s infinite;
         }
-        .btn-processing { background: #fff3cd; color: #856404; cursor: wait; }
+        @keyframes pulse-red { 0% {box-shadow: 0 0 0 0 rgba(238, 82, 83, 0.4);} 70% {box-shadow: 0 0 0 10px rgba(238, 82, 83, 0);} 100% {box-shadow: 0 0 0 0 rgba(238, 82, 83, 0);} }
 
-        @keyframes pulse { 0% { opacity: 1; } 50% { opacity: 0.6; } 100% { opacity: 1; } }
+        .btn-processing { background-color: #fff3cd; color: #856404; border: none !important; cursor: wait;}
 
-        /* 文字輸入區 (Chat Style) */
-        .text-input-box {
+        /* 2. 文字輸入區 (對話氣泡風格) */
+        .text-input-wrapper {
             flex: 1;
-            display: flex;
-            flex-direction: column;
-            gap: 10px;
+            display: flex; flex-direction: column;
+            background: white;
+            border-radius: var(--radius-sub);
+            padding: 20px;
+            box-shadow: 0 4px 10px rgba(0,0,0,0.03);
+            border: 1px solid #eee;
         }
         
-        /* 模擬 User 對話框 */
-        .user-chat-bubble {
-            background: #f0f2f5;
+        .user-text-display {
+            flex: 1;
+            background: #f1f3f5;
+            border-radius: 12px;
             padding: 15px;
-            border-radius: 16px 16px 16px 0; /* 左下角尖尖 */
             font-size: 1rem;
-            color: #333;
-            line-height: 1.5;
-            box-shadow: 0 2px 5px rgba(0,0,0,0.05);
-            min-height: 60px;
-            max-height: 150px;
+            color: #495057;
+            line-height: 1.6;
+            margin-bottom: 15px;
             overflow-y: auto;
+            border: 1px solid transparent;
+            transition: 0.3s;
         }
+        .user-text-display:empty::before { content: "等待使用者說話..."; color: #adb5bd; font-style: italic; }
 
-        /* 波形圖容器 */
+        /* 波形圖 */
         .visualizer-container {
             height: 50px;
-            background: #fafafa;
-            border-radius: 10px;
-            border: 1px solid #eee;
+            border-radius: 12px;
+            background: #2b2d42; /* 深色背景襯托波形 */
             overflow: hidden;
-            display: flex;
-            align-items: center;
+            position: relative;
         }
         #audio-visualizer { width: 100%; height: 100%; }
 
 
-        /* ================= 右側欄 (Main Content / System) ================= */
+        /* ================= 右側區域 (AI 系統展示) ================= */
         .right-column {
-            background-color: #fafbfd; /* 極淡的藍灰底 */
-            padding: 30px 40px;
+            padding: 40px;
             display: flex;
             flex-direction: column;
-            gap: 20px;
+            gap: 25px;
             position: relative;
+            background-image: radial-gradient(#e9ecef 1px, transparent 1px);
+            background-size: 20px 20px; /* 點點背景圖案 */
         }
 
-        /* 情緒感知卡片 */
-        .emotion-card {
-            background: white;
-            padding: 20px;
-            border-radius: 16px;
-            box-shadow: 0 4px 15px rgba(0,0,0,0.03);
-            border: 1px solid rgba(0,0,0,0.02);
+        /* 1. 情緒儀表板 (卡片化) */
+        .emotion-dashboard {
+            background: rgba(255,255,255,0.9);
+            backdrop-filter: blur(10px);
+            border-radius: var(--radius-main);
+            padding: 25px;
+            box-shadow: var(--shadow-soft);
+            border: 1px solid #fff;
+            display: flex; flex-direction: column; gap: 15px;
         }
 
-        .progress-row {
-            display: flex;
-            align-items: center;
-            margin-bottom: 15px;
-        }
-        .progress-row:last-child { margin-bottom: 0; }
+        .progress-group { display: flex; flex-direction: column; gap: 12px; }
+        .progress-row { display: flex; align-items: center; gap: 15px; }
         
         .progress-label {
-            width: 50px;
-            font-weight: 600;
-            color: #666;
-            font-size: 0.9rem;
+            width: 50px; font-weight: 600; font-size: 0.9rem; color: var(--text-sub);
+            display: flex; align-items: center; gap: 5px;
         }
-        
         .progress-track {
-            flex: 1;
-            height: 10px;
-            background-color: #f1f3f5;
-            border-radius: 20px;
-            margin: 0 15px;
-            overflow: hidden;
+            flex: 1; height: 8px; background: #e9ecef; border-radius: 10px; overflow: hidden;
         }
-        
         .progress-bar {
-            height: 100%;
-            width: 0%;
-            border-radius: 20px;
-            transition: width 0.6s cubic-bezier(0.22, 1, 0.36, 1); /* 平滑動畫 */
+            height: 100%; width: 0%; border-radius: 10px;
+            transition: width 0.6s cubic-bezier(0.22, 1, 0.36, 1);
         }
+        /* 漸層色條 */
+        .bar-text { background: linear-gradient(90deg, #f6d365 0%, #fda085 100%); }
+        .bar-audio { background: linear-gradient(90deg, #84fab0 0%, #8fd3f4 100%); }
+        .bar-face { background: linear-gradient(90deg, #a18cd1 0%, #fbc2eb 100%); }
+
+        .progress-value { width: 40px; text-align: right; font-weight: 700; font-size: 0.9rem; color: var(--text-main); }
+        .hidden-data { display: none; } /* 隱藏原始數據 */
+
+        /* 2. 決策與人格顯示 */
+        .status-header { display: flex; justify-content: space-between; align-items: flex-end; margin-top: 10px;}
         
-        /* 漸層進度條 */
-        .bar-text { background: linear-gradient(90deg, #fce38a, #f38181); }
-        .bar-audio { background: linear-gradient(90deg, #4facfe, #00f2fe); }
-        .bar-face { background: linear-gradient(90deg, #43e97b, #38f9d7); }
-        
-        .progress-value {
-            width: 45px;
-            font-size: 0.9rem;
-            font-weight: 700;
-            color: #444;
-            text-align: right;
-            font-family: 'Consolas', monospace;
+        .personality-badge {
+            background: white; padding: 6px 15px; border-radius: 20px;
+            box-shadow: 0 2px 10px rgba(0,0,0,0.05);
+            font-size: 0.9rem; color: var(--text-sub); border: 1px solid #eee;
         }
+        #personality-display { font-weight: 800; color: var(--primary-color); font-size: 1.1rem; margin-left: 5px;}
 
-        /* 隱藏數據源 */
-        .hidden-data { display: none; }
-
-        /* 決策終端機 */
-        .calc-header {
-            display: flex;
-            justify-content: space-between;
-            align-items: center;
-            margin-bottom: 5px;
-        }
-        .status-badge {
-            background: #e9ecef;
-            padding: 4px 12px;
-            border-radius: 20px;
-            font-size: 0.8em;
-            color: #666;
-            font-weight: 600;
-        }
-        #personality-display { color: #6f42c1; font-weight: bold; margin-left: 5px;}
-
+        /* 終端機風格 */
         .calc-terminal {
-            background-color: #1e1e2e; /* 深藍灰 */
+            background-color: #1e1e2e;
             color: #a6accd;
-            border-radius: 12px;
-            padding: 15px;
             font-family: 'Consolas', 'Monaco', monospace;
-            font-size: 0.85em;
-            line-height: 1.5;
-            height: 100px;
+            font-size: 0.8rem;
+            padding: 15px;
+            border-radius: 12px;
+            height: 100px; /* 固定高度 */
             overflow-y: auto;
+            border-left: 4px solid var(--primary-color);
+            line-height: 1.5;
             box-shadow: inset 0 2px 5px rgba(0,0,0,0.2);
         }
-        /* 美化捲軸 */
         .calc-terminal::-webkit-scrollbar { width: 6px; }
         .calc-terminal::-webkit-scrollbar-thumb { background: #444; border-radius: 3px; }
 
-        /* AI 舞台區 */
+        /* 3. AI 舞台區 */
         .avatar-stage {
             flex: 1;
-            display: flex;
-            justify-content: center;
-            align-items: center;
             position: relative;
-            margin-top: 10px;
-        }
-        
-        /* 機器人底部光暈 */
-        .avatar-glow {
-            position: absolute;
-            width: 300px; height: 300px;
-            background: radial-gradient(circle, rgba(79, 172, 254, 0.1) 0%, rgba(255,255,255,0) 70%);
-            z-index: 0;
-            pointer-events: none;
+            display: flex; justify-content: center; align-items: center;
         }
 
         #assistant-avatar {
-            max-width: 100%;
-            max-height: 100%;
+            max-width: 100%; max-height: 320px; /* 限制高度避免太大 */
             object-fit: contain;
-            z-index: 1;
-            filter: drop-shadow(0 10px 20px rgba(0,0,0,0.1));
+            filter: drop-shadow(0 20px 30px rgba(67, 97, 238, 0.15));
             transition: transform 0.3s;
         }
-        .speaking { animation: subtle-bounce 0.8s infinite ease-in-out; }
-        @keyframes subtle-bounce { 0% { transform: scale(1); } 50% { transform: scale(1.03); } 100% { transform: scale(1); } }
+        .speaking { animation: avatar-pulse 0.8s infinite ease-in-out; }
+        @keyframes avatar-pulse { 0% {transform: scale(1);} 50% {transform: scale(1.03);} 100% {transform: scale(1);} }
 
         /* AI 氣泡 */
-        .ai-bubble-container {
+        .ai-message-box {
             position: absolute;
-            bottom: 20px;
-            background: rgba(255, 255, 255, 0.9);
-            backdrop-filter: blur(5px);
+            bottom: 0; left: 50%; transform: translateX(-50%) translateY(20px);
+            background: white;
             padding: 15px 25px;
-            border-radius: 20px 20px 5px 20px; /* 右下角對話 */
-            border: 1px solid rgba(0,0,0,0.05);
-            box-shadow: 0 5px 20px rgba(0,123,255,0.15);
-            color: #333;
-            font-weight: 600;
-            font-size: 1.1em;
-            max-width: 80%;
+            border-radius: 20px;
+            border-bottom-left-radius: 4px; /* 讓它看起來像氣泡 */
+            box-shadow: 0 5px 20px rgba(0,0,0,0.08);
+            font-weight: 500; color: #333;
             text-align: center;
-            opacity: 0; 
-            transform: translateY(10px);
-            transition: all 0.4s ease;
-            z-index: 10;
+            min-width: 200px; max-width: 80%;
+            opacity: 0; transition: all 0.4s cubic-bezier(0.175, 0.885, 0.32, 1.275);
+            pointer-events: none;
+            border: 1px solid #f0f0f0;
         }
-        .ai-bubble-container.show { opacity: 1; transform: translateY(0); }
+        .ai-message-box.show { opacity: 1; transform: translateX(-50%) translateY(0); }
+        .ai-message-box::after { /* 小三角形 */
+            content: ''; position: absolute; bottom: -8px; left: 20px;
+            border-width: 8px 8px 0; border-style: solid; border-color: white transparent transparent transparent;
+        }
 
-        /* 邏輯隱藏區 */
-        .logic-holder { position: absolute; opacity: 0; pointer-events: none; height: 0; width: 0; }
-        #current-dialogue-area { opacity: 0; height: 0; position: absolute; }
+        /* --- 隱藏區 (保留邏輯運作) --- */
+        .logic-hidden { position: absolute; width: 0; height: 0; overflow: hidden; opacity: 0; pointer-events: none; }
+        
+        /* 響應式微調 */
+        @media (max-width: 1100px) {
+            .main-container { grid-template-columns: 300px 1fr; }
+        }
     </style>
 </head>
 <body>
 
     <div class="connection-bar">
-        <span>⚙️ 系統設定: </span>
-        <input type="text" id="tunnel-url" placeholder="請輸入 Cloudflare URL...">
-        <button onclick="manualConnect()">連線</button>
+        <span>⚙️ 連線設定:</span>
+        <input type="text" id="tunnel-url" placeholder="請輸入 Cloudflare Tunnel 網址...">
+        <button onclick="manualConnect()">連線主機</button>
     </div>
 
     <div class="main-container">
         
         <div class="left-column">
             
-            <div>
-                <h3>👁️ 語音輸入 (User)</h3>
-                <div class="video-box">
-                    <div id="camera-preview">
-                        <video id="video-stream" autoplay muted></video>
-                    </div>
+            <div class="video-wrapper">
+                <h3><span style="font-size:1.2em">📷</span> 視覺輸入</h3>
+                <div id="camera-preview">
+                    <video id="video-stream" autoplay muted></video>
                 </div>
                 <button id="record-button" class="btn-idle" onclick="toggleRecording()" disabled>
-                    <span style="font-size: 1.2em;">🎙️</span> <span id="record-text">等待連線...</span>
+                    <span id="record-text">請先連線...</span>
                 </button>
             </div>
 
-            <div class="text-input-box">
-                <h3>💬 識別內容</h3>
-                <div id="user-text-mirror" class="user-chat-bubble">
-                    <span style="color:#aaa; font-style:italic;">(等待說話...)</span>
-                </div>
-                
+            <div class="text-input-wrapper">
+                <h3><span style="font-size:1.2em">💬</span> 對話內容</h3>
+                <div id="user-text-mirror" class="user-text-display"></div>
                 <div class="visualizer-container">
                     <canvas id="audio-visualizer"></canvas>
                 </div>
@@ -349,60 +321,65 @@
 
         <div class="right-column">
             
-            <div>
-                <h3>📊 多模態情緒感知 (Emotion API)</h3>
-                <div class="emotion-card">
+            <div class="emotion-dashboard">
+                <h3><span style="font-size:1.2em">📊</span> 多模態情緒感知</h3>
+                
+                <div class="progress-group">
                     <div class="progress-row">
-                        <div class="progress-label">文字</div>
+                        <div class="progress-label"><span>📝</span> 文字</div>
                         <div class="progress-track"><div class="progress-bar bar-text" id="bar-text-visual"></div></div>
                         <div class="progress-value" id="val-text-visual">0%</div>
                     </div>
                     <div class="progress-row">
-                        <div class="progress-label">語音</div>
+                        <div class="progress-label"><span>🎤</span> 語音</div>
                         <div class="progress-track"><div class="progress-bar bar-audio" id="bar-audio-visual"></div></div>
                         <div class="progress-value" id="val-audio-visual">0%</div>
                     </div>
                     <div class="progress-row">
-                        <div class="progress-label">臉部</div>
+                        <div class="progress-label"><span>🎭</span> 臉部</div>
                         <div class="progress-track"><div class="progress-bar bar-face" id="bar-face-visual"></div></div>
                         <div class="progress-value" id="val-face-visual">0%</div>
                     </div>
-                    <div class="hidden-data">
-                        <span id="text-emotion-display">--</span>
-                        <span id="audio-emotion-display">--</span>
-                        <span id="facial-emotion-display">--</span>
-                    </div>
+                </div>
+
+                <div class="hidden-data">
+                    <span id="text-emotion-display">--</span>
+                    <span id="audio-emotion-display">--</span>
+                    <span id="facial-emotion-display">--</span>
                 </div>
             </div>
 
-            <div>
-                <div class="calc-header">
-                    <h3>🧠 決策計算過程</h3>
-                    <div class="status-badge">
-                        人格: <span id="personality-display">等待中</span> 
-                        <span id="personality-mode-tag" style="font-weight:normal;">(Auto)</span>
+            <div style="flex:1; display:flex; flex-direction:column; gap:15px;">
+                <div class="status-header">
+                    <h3><span style="font-size:1.2em">🧮</span> 決策運算</h3>
+                    <div class="personality-badge">
+                        當前人格: <span id="personality-display">待命</span> 
+                        <span id="personality-mode-tag" style="color:#aaa;">(Auto)</span>
                     </div>
                 </div>
+                
                 <div id="calc-display-area" class="calc-terminal">
-                    > System initialized...<br>> Waiting for input...
+                    > System initialized...
+                    > Waiting for input...
                 </div>
-            </div>
 
-            <div class="avatar-stage">
-                <div class="avatar-glow"></div>
-                <img id="assistant-avatar" src="" alt=""> <div id="ai-bubble-mirror" class="ai-bubble-container">
-                    ...
+                <div class="avatar-stage">
+                    <img id="assistant-avatar" src="" alt="">
+                    <div id="ai-bubble-mirror" class="ai-message-box">
+                        嗨！我是你的 AI 助理。
+                    </div>
                 </div>
             </div>
         </div>
     </div>
 
-    <div class="logic-holder">
+    <div class="logic-hidden">
         <div id="current-dialogue-area"></div>
         <audio id="tts-audio"></audio>
     </div>
 
     <script>
+        /* --- 核心運作邏輯 (完全保留) --- */
         const STATE = { IDLE: 'IDLE', RECORDING: 'RECORDING', PROCESSING: 'PROCESSING' };
         let currentState = STATE.IDLE;
         let mediaRecorder, audioStream, videoTrack, audioContext, analyserNode;
@@ -417,13 +394,14 @@
         async function manualConnect() {
             const url = document.getElementById('tunnel-url').value.trim();
             if(!url) return alert("請輸入網址");
+            
             try {
                 const testImg = new Image();
                 testImg.src = `${url}/static/image/humorous.png`;
                 testImg.onload = () => {
                     CURRENT_BASE_URL = url.endsWith('/') ? url.slice(0, -1) : url;
                     document.getElementById('record-button').disabled = false;
-                    document.getElementById('record-text').textContent = "點擊開始對話";
+                    document.getElementById('record-text').innerHTML = "點擊開始錄音"; // UI Update
                     loadAvatar('humorous'); 
                     initMedia();
                 };
@@ -453,23 +431,42 @@
         function drawVisualizer() {
             const canvas = document.getElementById('audio-visualizer');
             const ctx = canvas.getContext('2d');
-            const container = canvas.parentElement;
-            canvas.width = container.clientWidth;
-            canvas.height = container.clientHeight;
+            
+            // Auto resize
+            if(canvas.clientWidth !== canvas.width) {
+                canvas.width = canvas.parentElement.clientWidth;
+                canvas.height = canvas.parentElement.clientHeight;
+            }
+
             const bufferLength = analyserNode.frequencyBinCount;
             const dataArray = new Uint8Array(bufferLength);
+            
             const draw = () => {
                 requestAnimationFrame(draw);
                 analyserNode.getByteFrequencyData(dataArray);
-                ctx.clearRect(0, 0, canvas.width, canvas.height); // 透明背景
+                
+                // Dark theme bg
+                ctx.fillStyle = '#2b2d42';
+                ctx.fillRect(0, 0, canvas.width, canvas.height);
+                
                 const barWidth = (canvas.width / bufferLength) * 2.5;
                 let x = 0;
                 for(let i = 0; i < bufferLength; i++) {
-                    const barHeight = (dataArray[i] / 255) * canvas.height;
-                    ctx.fillStyle = `rgb(79, 172, 254)`; // 科技藍
+                    const value = dataArray[i];
+                    // Gradient bars
+                    const percent = value / 255;
+                    const barHeight = percent * canvas.height;
+                    
+                    // Dynamic color based on loudness
+                    const r = 100 + (percent * 155);
+                    const g = 100 + (percent * 50);
+                    const b = 255;
+                    
+                    ctx.fillStyle = `rgb(${r}, ${g}, ${b})`;
                     ctx.fillRect(x, canvas.height - barHeight, barWidth, barHeight);
                     x += barWidth + 1;
                 }
+                
                 let sum = 0; for(let i=0; i<bufferLength; i++) sum += dataArray[i];
                 if(currentState === STATE.RECORDING && (sum/bufferLength) > VOICE_THRESHOLD) lastSpeechTime = Date.now();
             };
@@ -478,6 +475,7 @@
 
         let lastSpeechTime = 0;
         let silenceTimer = null;
+
         function toggleRecording() {
             if(Date.now() < ignoreClicksUntil) return;
             if(currentState === STATE.IDLE) startRecording();
@@ -489,11 +487,17 @@
             const btn = document.getElementById('record-button');
             const txt = document.getElementById('record-text');
             if(state === STATE.IDLE) {
-                btn.className = 'btn-idle'; txt.textContent = "點擊開始對話"; btn.disabled = false;
+                btn.className = 'btn-idle'; 
+                txt.innerHTML = "🎙️ 點擊開始對話"; 
+                btn.disabled = false;
             } else if(state === STATE.RECORDING) {
-                btn.className = 'btn-recording'; txt.textContent = "聆聽中..."; btn.disabled = false;
+                btn.className = 'btn-recording'; 
+                txt.innerHTML = "👂 正在聆聽中..."; 
+                btn.disabled = false;
             } else if(state === STATE.PROCESSING) {
-                btn.className = 'btn-processing'; txt.textContent = "AI 思考中..."; btn.disabled = true;
+                btn.className = 'btn-processing'; 
+                txt.innerHTML = "🧠 AI 思考中..."; 
+                btn.disabled = true;
             }
         }
 
@@ -541,7 +545,7 @@
         }
 
         function handleResult(data) {
-            // 邏輯數據寫入 (內容會被下方 Observer 同步到 UI)
+            // 這個 ID 對應到隱藏區，內容會被下方的 Observer 同步到新 UI
             const chatArea = document.getElementById('current-dialogue-area');
             chatArea.innerHTML = `
                 <div class="bubble user-bubble">${data.user_text || "..."}</div>
@@ -551,7 +555,7 @@
             const mapE = { "comforting": "🤗 安撫", "cheerful": "😄 開朗", "humorous": "😆 幽默", "gentle": "💝 溫柔", "rational": "🤔 理性", "encouraging": "💪 鼓勵" };
             const pName = mapE[data.personality] || data.personality;
             document.getElementById('personality-display').textContent = pName;
-            document.getElementById('personality-mode-tag').textContent = data.new_manual_personality ? "(手動)" : "(自動)";
+            document.getElementById('personality-mode-tag').textContent = data.new_manual_personality ? "手動介入" : "自動演算";
 
             if(data.emotion_results) {
                 if(data.emotion_results.text) document.getElementById('text-emotion-display').textContent = `${data.emotion_results.text.emotion} ${(data.emotion_results.text.score*100).toFixed(0)}%`;
@@ -560,7 +564,7 @@
             }
 
             if(data.calculation_logs) {
-                document.getElementById('calc-display-area').innerHTML = data.calculation_logs.join('<br>');
+                document.getElementById('calc-display-area').textContent = data.calculation_logs.join('\n');
             }
 
             loadAvatar(data.personality);
@@ -581,17 +585,17 @@
             audio.onerror = () => { avatar.classList.remove('speaking'); updateBtnState(STATE.IDLE); };
             audio.play();
         }
-    </script>
 
-    <script>
+        /* --- UI 同步腳本 (監聽隱藏數據，更新美化介面) --- */
+        
+        // 1. 同步對話
         const dialogueObserver = new MutationObserver((mutations) => {
             const source = document.getElementById('current-dialogue-area');
             const userBubble = source.querySelector('.user-bubble');
             const botBubble = source.querySelector('.bot-bubble');
             
-            const userMirror = document.getElementById('user-text-mirror');
-            if(userBubble) userMirror.textContent = userBubble.textContent;
-
+            if(userBubble) document.getElementById('user-text-mirror').textContent = userBubble.textContent;
+            
             const aiMirror = document.getElementById('ai-bubble-mirror');
             if(botBubble) {
                 aiMirror.textContent = botBubble.textContent;
@@ -602,6 +606,7 @@
         });
         dialogueObserver.observe(document.getElementById('current-dialogue-area'), { childList: true, subtree: true });
 
+        // 2. 同步情緒進度條
         function syncProgressBar(sourceId, barId, valId) {
             const source = document.getElementById(sourceId);
             const observer = new MutationObserver(() => {
@@ -619,5 +624,6 @@
         syncProgressBar('audio-emotion-display', 'bar-audio-visual', 'val-audio-visual');
         syncProgressBar('facial-emotion-display', 'bar-face-visual', 'val-face-visual');
     </script>
+
 </body>
 </html>
