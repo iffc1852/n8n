@@ -1,0 +1,616 @@
+<!DOCTYPE html>
+<html lang="zh-Hant">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>AI 多模態助理 (UI重製版)</title>
+    <style>
+        /* --- 全局基礎設定 --- */
+        body { 
+            font-family: '微軟正黑體', 'Segoe UI', sans-serif;
+            margin: 0; padding: 0; 
+            background-color: #f0f2f5; 
+            height: 100vh; 
+            display: flex;
+            justify-content: center;
+            align-items: center;
+        }
+
+        /* --- 主容器：模擬圖片中的白色卡片 --- */
+        .main-container {
+            width: 1000px;
+            max-width: 95vw;
+            height: 85vh;
+            background-color: #fff;
+            border-radius: 20px;
+            box-shadow: 0 10px 25px rgba(0,0,0,0.1);
+            display: grid;
+            grid-template-columns: 1fr 1.2fr; /* 左窄 右寬 */
+            grid-template-rows: auto 1fr;
+            gap: 20px;
+            padding: 30px;
+            box-sizing: border-box;
+            border: 2px solid #333; /* 漫畫風格邊框 */
+            overflow: hidden;
+            position: relative;
+        }
+
+        /* --- 頂部連線列 (平時隱藏或縮小，為了不破壞畫面) --- */
+        .connection-bar {
+            position: absolute;
+            top: 0; left: 0; width: 100%;
+            background: rgba(0,0,0,0.8);
+            padding: 5px;
+            text-align: center;
+            z-index: 100;
+            display: flex;
+            justify-content: center;
+            gap: 10px;
+            transform: translateY(-90%);
+            transition: transform 0.3s;
+        }
+        .connection-bar:hover { transform: translateY(0); }
+        .connection-bar input { padding: 5px; border-radius: 4px; border:none; width: 300px;}
+        .connection-bar button { cursor: pointer; background: #28a745; color: white; border: none; padding: 5px 10px; border-radius: 4px;}
+
+        /* --- 通用標題樣式 --- */
+        h3 {
+            margin: 0 0 10px 0;
+            font-size: 1.1em;
+            color: #333;
+            font-weight: bold;
+        }
+
+        /* ================= 左側區域 (使用者) ================= */
+        .left-column {
+            display: flex;
+            flex-direction: column;
+            gap: 20px;
+            height: 100%;
+        }
+
+        /* 1. 語音輸入 (視訊鏡頭區) */
+        .video-box {
+            border: 2px solid #333;
+            border-radius: 15px;
+            padding: 10px;
+            background: #fff;
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+            height: 45%; /* 上半部 */
+        }
+
+        #camera-preview {
+            width: 100%;
+            flex: 1;
+            background-color: #eee;
+            border-radius: 10px;
+            overflow: hidden;
+            position: relative;
+            border: 1px solid #ccc;
+        }
+        #camera-preview video { width: 100%; height: 100%; object-fit: cover; transform: scaleX(-1); } /* 鏡像 */
+
+        /* 錄音按鈕 (放在鏡頭下方) */
+        #record-button {
+            width: 100%;
+            margin-top: 10px;
+            padding: 10px;
+            border-radius: 8px;
+            border: none;
+            font-weight: bold;
+            cursor: pointer;
+            transition: all 0.2s;
+            text-align: center;
+        }
+        .btn-idle { background-color: #f0f0f0; color: #333; border: 1px solid #ccc !important;}
+        .btn-recording { background-color: #ffe6e6; color: #dc3545; border: 1px solid #dc3545 !important; animation: pulse 1.5s infinite;}
+        .btn-processing { background-color: #fff3cd; color: #856404; }
+
+        /* 2. 文字輸入 (模擬對話框 + 波形) */
+        .text-input-box {
+            border: 2px solid #ccc;
+            border-radius: 10px;
+            padding: 15px;
+            background: #f9f9f9;
+            flex: 1; /* 佔據剩下高度 */
+            display: flex;
+            flex-direction: column;
+            position: relative;
+        }
+        
+        /* 這裡用來顯示使用者的話 */
+        .user-text-display {
+            flex: 1;
+            background: #eee;
+            border-radius: 5px;
+            padding: 10px;
+            font-size: 1.2em;
+            color: #333;
+            overflow-y: auto;
+            border: 1px solid #ddd;
+            margin-bottom: 10px;
+        }
+
+        /* 波形圖容器 */
+        .visualizer-container {
+            height: 40px;
+            border: 1px solid #999;
+            border-radius: 5px;
+            background: #fff;
+            overflow: hidden;
+            position: relative;
+        }
+        #audio-visualizer { width: 100%; height: 100%; }
+
+
+        /* ================= 右側區域 (系統) ================= */
+        .right-column {
+            display: flex;
+            flex-direction: column;
+            gap: 15px;
+            height: 100%;
+            position: relative;
+        }
+
+        /* 1. 多模態情緒感知 (進度條區) */
+        .emotion-section {
+            border: 2px solid #ccc;
+            border-radius: 15px;
+            padding: 20px;
+            background: #fff;
+        }
+
+        .progress-row {
+            display: flex;
+            align-items: center;
+            margin-bottom: 12px;
+        }
+        .progress-label {
+            width: 60px;
+            font-weight: bold;
+            color: #555;
+            font-size: 0.9em;
+        }
+        .progress-track {
+            flex: 1;
+            height: 12px;
+            background-color: #e0e0e0;
+            border-radius: 10px;
+            overflow: hidden;
+            margin: 0 10px;
+            border: 1px solid #ccc;
+        }
+        .progress-bar {
+            height: 100%;
+            width: 0%; /* JS 會動態控制這裡 */
+            transition: width 0.5s ease;
+            border-radius: 10px;
+        }
+        /* 三種顏色 */
+        .bar-text { background-color: #ffc107; } /* 黃色 */
+        .bar-audio { background-color: #17a2b8; } /* 藍色 */
+        .bar-face { background-color: #28a745; } /* 綠色 */
+        
+        .progress-value {
+            width: 45px;
+            font-size: 0.9em;
+            font-weight: bold;
+            color: #333;
+            text-align: right;
+        }
+
+        /* 隱藏原本的 span，只用它的數據 */
+        .hidden-data { display: none; }
+
+
+        /* 2. 決策計算過程 (放在情緒下面) */
+        .calc-section {
+            background-color: #2d2d2d;
+            border-radius: 10px;
+            padding: 10px;
+            font-family: monospace;
+            font-size: 0.8em;
+            color: #00ff00;
+            height: 120px;
+            overflow-y: auto;
+            border: 2px solid #333;
+        }
+
+        /* 3. AI 機器人 (右下角) */
+        .avatar-section {
+            flex: 1;
+            border: 2px solid #333;
+            border-radius: 20px;
+            background: #fff;
+            display: flex;
+            justify-content: center;
+            align-items: center;
+            overflow: hidden;
+            position: relative;
+            min-height: 250px;
+        }
+        
+        #assistant-avatar {
+            max-width: 90%;
+            max-height: 90%;
+            object-fit: contain;
+            transition: transform 0.2s;
+        }
+        .speaking { animation: bounce 0.5s infinite alternate; }
+        @keyframes bounce { from { transform: scale(1); } to { transform: scale(1.05); } }
+
+        /* 4. AI 對話框 (浮在機器人頭上或旁邊) */
+        .ai-bubble-container {
+            position: absolute;
+            bottom: 20px; left: 20px; right: 20px;
+            background: rgba(255,255,255,0.95);
+            padding: 10px;
+            border-radius: 10px;
+            border: 2px solid #007bff;
+            min-height: 40px;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            text-align: center;
+            font-weight: bold;
+            color: #333;
+            box-shadow: 0 4px 10px rgba(0,0,0,0.1);
+            opacity: 0; 
+            transition: opacity 0.3s;
+        }
+        .ai-bubble-container.show { opacity: 1; }
+
+        /* --- 隱藏區 (為了不破壞 JS 邏輯，保留 ID 但隱藏) --- */
+        .logic-holder { 
+            position: absolute; 
+            opacity: 0; 
+            pointer-events: none; 
+            height: 0; width: 0; overflow: hidden;
+        }
+
+        /* 原本的 JS 會把對話塞進 #current-dialogue-area
+           我們透過 CSS 把它隱藏，然後用 MutationObserver 
+           把內容同步到新的 UI 區塊 
+        */
+        #current-dialogue-area { opacity: 0; height: 0; position: absolute; }
+        
+        /* 核心人格顯示微調 */
+        .core-status {
+            position: absolute;
+            top: 10px; right: 10px;
+            background: rgba(255,255,255,0.9);
+            padding: 5px 10px;
+            border-radius: 15px;
+            border: 1px solid #ccc;
+            font-size: 0.8em;
+            z-index: 5;
+        }
+        #personality-display { font-weight: bold; color: #6f42c1; }
+
+    </style>
+</head>
+<body>
+
+    <div class="connection-bar">
+        <span style="color:white; line-height: 30px;">🔧 系統設定: </span>
+        <input type="text" id="tunnel-url" placeholder="輸入 Cloudflare URL">
+        <button onclick="manualConnect()">連線</button>
+    </div>
+
+    <div class="main-container">
+        
+        <div class="left-column">
+            
+            <h3>語音輸入</h3>
+            <div class="video-box">
+                <div id="camera-preview">
+                    <video id="video-stream" autoplay muted></video>
+                </div>
+                <button id="record-button" class="btn-idle" onclick="toggleRecording()" disabled>
+                    <span id="record-text">等待連線...</span>
+                </button>
+            </div>
+
+            <h3>文字輸入</h3>
+            <div class="text-input-box">
+                <div id="user-text-mirror" class="user-text-display">...</div>
+                
+                <div class="visualizer-container">
+                    <canvas id="audio-visualizer"></canvas>
+                </div>
+            </div>
+        </div>
+
+        <div class="right-column">
+            
+            <h3>多模態情緒感知</h3>
+            <div class="emotion-section">
+                <div class="progress-row">
+                    <div class="progress-label">文字</div>
+                    <div class="progress-track"><div class="progress-bar bar-text" id="bar-text-visual"></div></div>
+                    <div class="progress-value" id="val-text-visual">0%</div>
+                </div>
+                <div class="progress-row">
+                    <div class="progress-label">語音</div>
+                    <div class="progress-track"><div class="progress-bar bar-audio" id="bar-audio-visual"></div></div>
+                    <div class="progress-value" id="val-audio-visual">0%</div>
+                </div>
+                <div class="progress-row">
+                    <div class="progress-label">臉部</div>
+                    <div class="progress-track"><div class="progress-bar bar-face" id="bar-face-visual"></div></div>
+                    <div class="progress-value" id="val-face-visual">0%</div>
+                </div>
+
+                <div class="hidden-data">
+                    <span id="text-emotion-display">--</span>
+                    <span id="audio-emotion-display">--</span>
+                    <span id="facial-emotion-display">--</span>
+                </div>
+            </div>
+
+            <div style="display: flex; justify-content: space-between; align-items: baseline;">
+                <h3>決策計算過程</h3>
+                <div style="font-size: 0.9em;">
+                    當前人格: <span id="personality-display">等待中...</span> 
+                    <span id="personality-mode-tag" style="font-size:0.8em; color:#999;">(Auto)</span>
+                </div>
+            </div>
+            
+            <div id="calc-display-area" class="calc-section">
+                (系統待命...)
+            </div>
+
+            <div class="avatar-section">
+                <img id="assistant-avatar" src="" alt="AI Avatar">
+                
+                <div id="ai-bubble-mirror" class="ai-bubble-container">
+                    ...
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <div class="logic-holder">
+        <div id="current-dialogue-area"></div> <audio id="tts-audio"></audio>
+    </div>
+
+    <script>
+        /* --- 邏輯部分 (保留原本功能) --- */
+        const STATE = { IDLE: 'IDLE', RECORDING: 'RECORDING', PROCESSING: 'PROCESSING' };
+        let currentState = STATE.IDLE;
+        let mediaRecorder, audioStream, videoTrack, audioContext, analyserNode;
+        let audioChunks = [], capturedImageBlobs = [], captureInterval;
+        let CURRENT_BASE_URL = null;
+        let ignoreClicksUntil = 0;
+
+        const VOICE_THRESHOLD = 5;      
+        const SILENCE_TIMEOUT = 2.5;     
+        const FRAME_RATE = 0.5;
+
+        async function manualConnect() {
+            const url = document.getElementById('tunnel-url').value.trim();
+            if(!url) return alert("請輸入網址");
+            
+            try {
+                const testImg = new Image();
+                testImg.src = `${url}/static/image/humorous.png`;
+                testImg.onload = () => {
+                    CURRENT_BASE_URL = url.endsWith('/') ? url.slice(0, -1) : url;
+                    document.getElementById('record-button').disabled = false;
+                    document.getElementById('record-text').textContent = "點擊開始 (Click to Start)";
+                    loadAvatar('humorous'); 
+                    initMedia();
+                };
+                testImg.onerror = () => alert("連線失敗");
+            } catch(e) { alert("錯誤: " + e.message); }
+        }
+
+        async function initMedia() {
+            try {
+                const stream = await navigator.mediaDevices.getUserMedia({ audio: true, video: true });
+                audioStream = stream;
+                document.getElementById('video-stream').srcObject = stream;
+                videoTrack = stream.getVideoTracks()[0];
+                setupAudioVisualizer(stream);
+            } catch(e) { console.error(e); alert("無法取得權限"); }
+        }
+
+        function setupAudioVisualizer(stream) {
+            if(!audioContext) audioContext = new (window.AudioContext || window.webkitAudioContext)();
+            const source = audioContext.createMediaStreamSource(stream);
+            analyserNode = audioContext.createAnalyser();
+            analyserNode.fftSize = 512;
+            source.connect(analyserNode);
+            drawVisualizer();
+        }
+
+        function drawVisualizer() {
+            const canvas = document.getElementById('audio-visualizer');
+            const ctx = canvas.getContext('2d');
+            
+            // 修正 Canvas 寬度
+            const container = canvas.parentElement;
+            canvas.width = container.clientWidth;
+            canvas.height = container.clientHeight;
+
+            const bufferLength = analyserNode.frequencyBinCount;
+            const dataArray = new Uint8Array(bufferLength);
+            
+            const draw = () => {
+                requestAnimationFrame(draw);
+                analyserNode.getByteFrequencyData(dataArray);
+                ctx.fillStyle = '#fff'; // 背景白
+                ctx.fillRect(0, 0, canvas.width, canvas.height);
+                
+                const barWidth = (canvas.width / bufferLength) * 2.5;
+                let x = 0;
+                for(let i = 0; i < bufferLength; i++) {
+                    const barHeight = (dataArray[i] / 255) * canvas.height;
+                    ctx.fillStyle = `rgb(100, 149, 237)`; // 藍色波形
+                    ctx.fillRect(x, canvas.height - barHeight, barWidth, barHeight);
+                    x += barWidth + 1;
+                }
+                // VAD 邏輯
+                let sum = 0; for(let i=0; i<bufferLength; i++) sum += dataArray[i];
+                if(currentState === STATE.RECORDING && (sum/bufferLength) > VOICE_THRESHOLD) lastSpeechTime = Date.now();
+            };
+            draw();
+        }
+
+        let lastSpeechTime = 0;
+        let silenceTimer = null;
+
+        function toggleRecording() {
+            if(Date.now() < ignoreClicksUntil) return;
+            if(currentState === STATE.IDLE) startRecording();
+            else if(currentState === STATE.RECORDING) stopRecording();
+        }
+
+        function updateBtnState(state) {
+            currentState = state;
+            const btn = document.getElementById('record-button');
+            const txt = document.getElementById('record-text');
+            if(state === STATE.IDLE) {
+                btn.className = 'btn-idle'; txt.textContent = "點擊開始對話"; btn.disabled = false;
+            } else if(state === STATE.RECORDING) {
+                btn.className = 'btn-recording'; txt.textContent = "聆聽中..."; btn.disabled = false;
+            } else if(state === STATE.PROCESSING) {
+                btn.className = 'btn-processing'; txt.textContent = "AI 思考中..."; btn.disabled = true;
+            }
+        }
+
+        function startRecording() {
+            updateBtnState(STATE.RECORDING);
+            audioChunks = []; capturedImageBlobs = [];
+            mediaRecorder = new MediaRecorder(audioStream);
+            mediaRecorder.ondataavailable = e => audioChunks.push(e.data);
+            mediaRecorder.onstop = uploadData;
+            mediaRecorder.start();
+            captureInterval = setInterval(() => {
+                if(!videoTrack) return;
+                const cvs = document.createElement('canvas');
+                cvs.width = 640; cvs.height = 480;
+                cvs.getContext('2d').drawImage(document.getElementById('video-stream'), 0, 0);
+                cvs.toBlob(b => capturedImageBlobs.push(b), 'image/jpeg', 0.8);
+            }, 1000/FRAME_RATE);
+            lastSpeechTime = Date.now();
+            ignoreClicksUntil = Date.now() + 1000;
+            silenceTimer = setInterval(() => {
+                if(Date.now() - lastSpeechTime > SILENCE_TIMEOUT * 1000) {
+                    if(Date.now() > ignoreClicksUntil) stopRecording(); 
+                }
+            }, 500);
+        }
+
+        function stopRecording() {
+            if(currentState !== STATE.RECORDING) return;
+            clearInterval(captureInterval); clearInterval(silenceTimer);
+            mediaRecorder.stop();
+            updateBtnState(STATE.PROCESSING);
+        }
+
+        async function uploadData() {
+            const audioBlob = new Blob(audioChunks, { type: 'audio/webm' });
+            if(audioBlob.size < 1000) { updateBtnState(STATE.IDLE); return; }
+            const fd = new FormData();
+            fd.append('audio_file', audioBlob);
+            capturedImageBlobs.forEach((b, i) => fd.append(`image_${i}`, b, `frame_${i}.jpg`));
+            fd.append('turn_data', JSON.stringify({ session_id: 'demo_01', history: [] }));
+            try {
+                const res = await fetch(`${CURRENT_BASE_URL}/api/v1/process`, { method: 'POST', body: fd });
+                handleResult(await res.json());
+            } catch(e) { alert("上傳失敗"); updateBtnState(STATE.IDLE); }
+        }
+
+        function handleResult(data) {
+            // 更新對話 (這是原本的 ID，內容會被下方的 Observer 同步到新 UI)
+            const chatArea = document.getElementById('current-dialogue-area');
+            chatArea.innerHTML = `
+                <div class="bubble user-bubble">${data.user_text || "..."}</div>
+                <div class="bubble bot-bubble">${data.reply || "..."}</div>
+            `;
+            
+            // 更新左側數據
+            const mapE = { "comforting": "🤗 安撫", "cheerful": "😄 開朗", "humorous": "😆 幽默", "gentle": "💝 溫柔", "rational": "🤔 理性", "encouraging": "💪 鼓勵" };
+            const pName = mapE[data.personality] || data.personality;
+            document.getElementById('personality-display').textContent = pName;
+            document.getElementById('personality-mode-tag').textContent = data.new_manual_personality ? "手動介入" : "自動演算";
+
+            if(data.emotion_results) {
+                // 原本 JS 寫入文字，下方的 UI 同步腳本會抓取這些文字並畫出進度條
+                if(data.emotion_results.text) document.getElementById('text-emotion-display').textContent = `${data.emotion_results.text.emotion} ${(data.emotion_results.text.score*100).toFixed(0)}%`;
+                if(data.emotion_results.audio) document.getElementById('audio-emotion-display').textContent = `${data.emotion_results.audio.emotion} ${(data.emotion_results.audio.score*100).toFixed(0)}%`;
+                if(data.emotion_results.facial) document.getElementById('facial-emotion-display').textContent = `${data.emotion_results.facial.emotion} ${(data.emotion_results.facial.confidence*100).toFixed(0)}%`;
+            }
+
+            // 更新計算顯示 (直接秀出)
+            if(data.calculation_logs) {
+                document.getElementById('calc-display-area').textContent = data.calculation_logs.join('\n');
+            }
+
+            loadAvatar(data.personality);
+            if(data.tts_audio_file) playAudio(data.tts_audio_file);
+            else updateBtnState(STATE.IDLE);
+        }
+
+        function loadAvatar(personality) {
+            document.getElementById('assistant-avatar').src = `${CURRENT_BASE_URL}/static/image/${personality || 'humorous'}.png`;
+        }
+
+        function playAudio(filename) {
+            const audio = document.getElementById('tts-audio');
+            const avatar = document.getElementById('assistant-avatar');
+            audio.src = `${CURRENT_BASE_URL}/api/v1/audio-download?filename=${filename}`;
+            audio.onplay = () => avatar.classList.add('speaking');
+            audio.onended = () => { avatar.classList.remove('speaking'); updateBtnState(STATE.IDLE); };
+            audio.onerror = () => { avatar.classList.remove('speaking'); updateBtnState(STATE.IDLE); };
+            audio.play();
+        }
+    </script>
+
+    <script>
+        // 1. 監聽對話更新，同步到新的文字框
+        const dialogueObserver = new MutationObserver((mutations) => {
+            const source = document.getElementById('current-dialogue-area');
+            const userBubble = source.querySelector('.user-bubble');
+            const botBubble = source.querySelector('.bot-bubble');
+            
+            // 更新 User 文字
+            const userMirror = document.getElementById('user-text-mirror');
+            if(userBubble) userMirror.textContent = userBubble.textContent;
+
+            // 更新 Bot 氣泡
+            const aiMirror = document.getElementById('ai-bubble-mirror');
+            if(botBubble) {
+                aiMirror.textContent = botBubble.textContent;
+                aiMirror.classList.add('show');
+            } else {
+                aiMirror.classList.remove('show');
+            }
+        });
+        dialogueObserver.observe(document.getElementById('current-dialogue-area'), { childList: true, subtree: true });
+
+        // 2. 監聽情緒分數更新，同步到進度條
+        function syncProgressBar(sourceId, barId, valId) {
+            const source = document.getElementById(sourceId);
+            const observer = new MutationObserver(() => {
+                const text = source.textContent; // 例如 "happy 80%"
+                const match = text.match(/(\d+)%/); // 抓取數字
+                if (match) {
+                    const percent = match[1];
+                    document.getElementById(barId).style.width = percent + "%";
+                    document.getElementById(valId).textContent = percent + "%";
+                }
+            });
+            observer.observe(source, { childList: true, characterData: true, subtree: true });
+        }
+
+        syncProgressBar('text-emotion-display', 'bar-text-visual', 'val-text-visual');
+        syncProgressBar('audio-emotion-display', 'bar-audio-visual', 'val-audio-visual');
+        syncProgressBar('facial-emotion-display', 'bar-face-visual', 'val-face-visual');
+    </script>
+
+</body>
+</html>
