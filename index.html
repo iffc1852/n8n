@@ -3,299 +3,319 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>AI 多模態助理 (UI重製版)</title>
+    <title>AI 多模態助理 (現代美化版)</title>
     <style>
-        /* --- 全局基礎設定 --- */
+        /* --- 1. 全局基礎設定 (Modern Reset) --- */
         body { 
-            font-family: '微軟正黑體', 'Segoe UI', sans-serif;
+            font-family: 'PingFang TC', 'Microsoft JhengHei', 'Segoe UI', sans-serif;
             margin: 0; padding: 0; 
-            background-color: #f0f2f5; 
+            background: linear-gradient(135deg, #f5f7fa 0%, #c3cfe2 100%); /* 柔和背景 */
             height: 100vh; 
             display: flex;
             justify-content: center;
             align-items: center;
+            color: #444;
         }
 
-        /* --- 主容器：模擬圖片中的白色卡片 --- */
+        /* --- 2. 主容器：現代化卡片 --- */
         .main-container {
-            width: 1000px;
-            max-width: 95vw;
-            height: 85vh;
-            background-color: #fff;
-            border-radius: 20px;
-            box-shadow: 0 10px 25px rgba(0,0,0,0.1);
+            width: 1100px;
+            max-width: 96vw;
+            height: 90vh;
+            background-color: rgba(255, 255, 255, 0.95);
+            backdrop-filter: blur(10px); /* 毛玻璃效果 */
+            border-radius: 24px;
+            box-shadow: 0 20px 60px rgba(0,0,0,0.15); /* 深邃陰影 */
             display: grid;
-            grid-template-columns: 1fr 1.2fr; /* 左窄 右寬 */
-            grid-template-rows: auto 1fr;
-            gap: 20px;
-            padding: 30px;
-            box-sizing: border-box;
-            border: 2px solid #333; /* 漫畫風格邊框 */
+            grid-template-columns: 350px 1fr; /* 左固定寬，右自適應 */
+            gap: 0; /* 用內距控制 */
             overflow: hidden;
             position: relative;
         }
 
-        /* --- 頂部連線列 (平時隱藏或縮小，為了不破壞畫面) --- */
+        /* --- 頂部隱藏設定列 --- */
         .connection-bar {
             position: absolute;
             top: 0; left: 0; width: 100%;
-            background: rgba(0,0,0,0.8);
-            padding: 5px;
+            background: rgba(30, 30, 40, 0.95);
+            padding: 8px;
             text-align: center;
-            z-index: 100;
+            z-index: 999;
             display: flex;
             justify-content: center;
+            align-items: center;
             gap: 10px;
             transform: translateY(-90%);
-            transition: transform 0.3s;
+            transition: transform 0.3s ease-in-out;
+            box-shadow: 0 4px 10px rgba(0,0,0,0.2);
         }
         .connection-bar:hover { transform: translateY(0); }
-        .connection-bar input { padding: 5px; border-radius: 4px; border:none; width: 300px;}
-        .connection-bar button { cursor: pointer; background: #28a745; color: white; border: none; padding: 5px 10px; border-radius: 4px;}
+        .connection-bar span { color: #fff; font-size: 0.9em; font-weight: bold; }
+        .connection-bar input { padding: 6px 12px; border-radius: 20px; border:none; width: 250px; outline: none;}
+        .connection-bar button { 
+            cursor: pointer; background: #4facfe; color: white; border: none; 
+            padding: 6px 15px; border-radius: 20px; font-weight: bold; 
+            transition: background 0.2s;
+        }
+        .connection-bar button:hover { background: #00f2fe; }
 
-        /* --- 通用標題樣式 --- */
+        /* 標題樣式 */
         h3 {
-            margin: 0 0 10px 0;
-            font-size: 1.1em;
-            color: #333;
-            font-weight: bold;
+            margin: 0 0 15px 0;
+            font-size: 1em;
+            color: #888;
+            text-transform: uppercase;
+            letter-spacing: 1px;
+            font-weight: 700;
+            border-bottom: 2px solid #f0f0f0;
+            padding-bottom: 8px;
         }
 
-        /* ================= 左側區域 (使用者) ================= */
+        /* ================= 左側欄 (Sidebar / User) ================= */
         .left-column {
+            background-color: #fff;
+            border-right: 1px solid #eee;
+            padding: 30px;
             display: flex;
             flex-direction: column;
-            gap: 20px;
-            height: 100%;
+            gap: 25px;
         }
 
-        /* 1. 語音輸入 (視訊鏡頭區) */
+        /* 視訊預覽框 */
         .video-box {
-            border: 2px solid #333;
-            border-radius: 15px;
-            padding: 10px;
-            background: #fff;
-            display: flex;
-            flex-direction: column;
-            align-items: center;
-            height: 45%; /* 上半部 */
-        }
-
-        #camera-preview {
-            width: 100%;
-            flex: 1;
-            background-color: #eee;
-            border-radius: 10px;
-            overflow: hidden;
             position: relative;
-            border: 1px solid #ccc;
+            background: #000;
+            border-radius: 16px;
+            overflow: hidden;
+            box-shadow: 0 8px 20px rgba(0,0,0,0.1);
+            aspect-ratio: 4/3;
         }
-        #camera-preview video { width: 100%; height: 100%; object-fit: cover; transform: scaleX(-1); } /* 鏡像 */
+        #camera-preview { width: 100%; height: 100%; background: #222; }
+        #camera-preview video { width: 100%; height: 100%; object-fit: cover; transform: scaleX(-1); opacity: 0.9;}
 
-        /* 錄音按鈕 (放在鏡頭下方) */
+        /* 錄音按鈕 (浮在視訊框下面) */
         #record-button {
             width: 100%;
             margin-top: 10px;
-            padding: 10px;
-            border-radius: 8px;
+            padding: 12px;
+            border-radius: 12px;
             border: none;
-            font-weight: bold;
+            font-weight: 600;
             cursor: pointer;
-            transition: all 0.2s;
-            text-align: center;
+            transition: all 0.3s ease;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            gap: 8px;
+            box-shadow: 0 4px 10px rgba(0,0,0,0.05);
         }
-        .btn-idle { background-color: #f0f0f0; color: #333; border: 1px solid #ccc !important;}
-        .btn-recording { background-color: #ffe6e6; color: #dc3545; border: 1px solid #dc3545 !important; animation: pulse 1.5s infinite;}
-        .btn-processing { background-color: #fff3cd; color: #856404; }
+        .btn-idle { background: linear-gradient(to right, #e0eafc, #cfdef3); color: #555; }
+        .btn-recording { 
+            background: linear-gradient(to right, #ff9a9e, #fecfef); 
+            color: #d63384; 
+            box-shadow: 0 0 15px rgba(255, 65, 108, 0.4);
+            animation: pulse 1.5s infinite;
+        }
+        .btn-processing { background: #fff3cd; color: #856404; cursor: wait; }
 
-        /* 2. 文字輸入 (模擬對話框 + 波形) */
+        @keyframes pulse { 0% { opacity: 1; } 50% { opacity: 0.6; } 100% { opacity: 1; } }
+
+        /* 文字輸入區 (Chat Style) */
         .text-input-box {
-            border: 2px solid #ccc;
-            border-radius: 10px;
-            padding: 15px;
-            background: #f9f9f9;
-            flex: 1; /* 佔據剩下高度 */
+            flex: 1;
             display: flex;
             flex-direction: column;
-            position: relative;
+            gap: 10px;
         }
         
-        /* 這裡用來顯示使用者的話 */
-        .user-text-display {
-            flex: 1;
-            background: #eee;
-            border-radius: 5px;
-            padding: 10px;
-            font-size: 1.2em;
+        /* 模擬 User 對話框 */
+        .user-chat-bubble {
+            background: #f0f2f5;
+            padding: 15px;
+            border-radius: 16px 16px 16px 0; /* 左下角尖尖 */
+            font-size: 1rem;
             color: #333;
+            line-height: 1.5;
+            box-shadow: 0 2px 5px rgba(0,0,0,0.05);
+            min-height: 60px;
+            max-height: 150px;
             overflow-y: auto;
-            border: 1px solid #ddd;
-            margin-bottom: 10px;
         }
 
         /* 波形圖容器 */
         .visualizer-container {
-            height: 40px;
-            border: 1px solid #999;
-            border-radius: 5px;
-            background: #fff;
+            height: 50px;
+            background: #fafafa;
+            border-radius: 10px;
+            border: 1px solid #eee;
             overflow: hidden;
-            position: relative;
+            display: flex;
+            align-items: center;
         }
         #audio-visualizer { width: 100%; height: 100%; }
 
 
-        /* ================= 右側區域 (系統) ================= */
+        /* ================= 右側欄 (Main Content / System) ================= */
         .right-column {
+            background-color: #fafbfd; /* 極淡的藍灰底 */
+            padding: 30px 40px;
             display: flex;
             flex-direction: column;
-            gap: 15px;
-            height: 100%;
+            gap: 20px;
             position: relative;
         }
 
-        /* 1. 多模態情緒感知 (進度條區) */
-        .emotion-section {
-            border: 2px solid #ccc;
-            border-radius: 15px;
+        /* 情緒感知卡片 */
+        .emotion-card {
+            background: white;
             padding: 20px;
-            background: #fff;
+            border-radius: 16px;
+            box-shadow: 0 4px 15px rgba(0,0,0,0.03);
+            border: 1px solid rgba(0,0,0,0.02);
         }
 
         .progress-row {
             display: flex;
             align-items: center;
-            margin-bottom: 12px;
+            margin-bottom: 15px;
         }
+        .progress-row:last-child { margin-bottom: 0; }
+        
         .progress-label {
-            width: 60px;
-            font-weight: bold;
-            color: #555;
-            font-size: 0.9em;
+            width: 50px;
+            font-weight: 600;
+            color: #666;
+            font-size: 0.9rem;
         }
+        
         .progress-track {
             flex: 1;
-            height: 12px;
-            background-color: #e0e0e0;
-            border-radius: 10px;
+            height: 10px;
+            background-color: #f1f3f5;
+            border-radius: 20px;
+            margin: 0 15px;
             overflow: hidden;
-            margin: 0 10px;
-            border: 1px solid #ccc;
         }
+        
         .progress-bar {
             height: 100%;
-            width: 0%; /* JS 會動態控制這裡 */
-            transition: width 0.5s ease;
-            border-radius: 10px;
+            width: 0%;
+            border-radius: 20px;
+            transition: width 0.6s cubic-bezier(0.22, 1, 0.36, 1); /* 平滑動畫 */
         }
-        /* 三種顏色 */
-        .bar-text { background-color: #ffc107; } /* 黃色 */
-        .bar-audio { background-color: #17a2b8; } /* 藍色 */
-        .bar-face { background-color: #28a745; } /* 綠色 */
+        
+        /* 漸層進度條 */
+        .bar-text { background: linear-gradient(90deg, #fce38a, #f38181); }
+        .bar-audio { background: linear-gradient(90deg, #4facfe, #00f2fe); }
+        .bar-face { background: linear-gradient(90deg, #43e97b, #38f9d7); }
         
         .progress-value {
             width: 45px;
-            font-size: 0.9em;
-            font-weight: bold;
-            color: #333;
+            font-size: 0.9rem;
+            font-weight: 700;
+            color: #444;
             text-align: right;
+            font-family: 'Consolas', monospace;
         }
 
-        /* 隱藏原本的 span，只用它的數據 */
+        /* 隱藏數據源 */
         .hidden-data { display: none; }
 
-
-        /* 2. 決策計算過程 (放在情緒下面) */
-        .calc-section {
-            background-color: #2d2d2d;
-            border-radius: 10px;
-            padding: 10px;
-            font-family: monospace;
-            font-size: 0.8em;
-            color: #00ff00;
-            height: 120px;
-            overflow-y: auto;
-            border: 2px solid #333;
+        /* 決策終端機 */
+        .calc-header {
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            margin-bottom: 5px;
         }
-
-        /* 3. AI 機器人 (右下角) */
-        .avatar-section {
-            flex: 1;
-            border: 2px solid #333;
+        .status-badge {
+            background: #e9ecef;
+            padding: 4px 12px;
             border-radius: 20px;
-            background: #fff;
+            font-size: 0.8em;
+            color: #666;
+            font-weight: 600;
+        }
+        #personality-display { color: #6f42c1; font-weight: bold; margin-left: 5px;}
+
+        .calc-terminal {
+            background-color: #1e1e2e; /* 深藍灰 */
+            color: #a6accd;
+            border-radius: 12px;
+            padding: 15px;
+            font-family: 'Consolas', 'Monaco', monospace;
+            font-size: 0.85em;
+            line-height: 1.5;
+            height: 100px;
+            overflow-y: auto;
+            box-shadow: inset 0 2px 5px rgba(0,0,0,0.2);
+        }
+        /* 美化捲軸 */
+        .calc-terminal::-webkit-scrollbar { width: 6px; }
+        .calc-terminal::-webkit-scrollbar-thumb { background: #444; border-radius: 3px; }
+
+        /* AI 舞台區 */
+        .avatar-stage {
+            flex: 1;
             display: flex;
             justify-content: center;
             align-items: center;
-            overflow: hidden;
             position: relative;
-            min-height: 250px;
+            margin-top: 10px;
         }
         
-        #assistant-avatar {
-            max-width: 90%;
-            max-height: 90%;
-            object-fit: contain;
-            transition: transform 0.2s;
+        /* 機器人底部光暈 */
+        .avatar-glow {
+            position: absolute;
+            width: 300px; height: 300px;
+            background: radial-gradient(circle, rgba(79, 172, 254, 0.1) 0%, rgba(255,255,255,0) 70%);
+            z-index: 0;
+            pointer-events: none;
         }
-        .speaking { animation: bounce 0.5s infinite alternate; }
-        @keyframes bounce { from { transform: scale(1); } to { transform: scale(1.05); } }
 
-        /* 4. AI 對話框 (浮在機器人頭上或旁邊) */
+        #assistant-avatar {
+            max-width: 100%;
+            max-height: 100%;
+            object-fit: contain;
+            z-index: 1;
+            filter: drop-shadow(0 10px 20px rgba(0,0,0,0.1));
+            transition: transform 0.3s;
+        }
+        .speaking { animation: subtle-bounce 0.8s infinite ease-in-out; }
+        @keyframes subtle-bounce { 0% { transform: scale(1); } 50% { transform: scale(1.03); } 100% { transform: scale(1); } }
+
+        /* AI 氣泡 */
         .ai-bubble-container {
             position: absolute;
-            bottom: 20px; left: 20px; right: 20px;
-            background: rgba(255,255,255,0.95);
-            padding: 10px;
-            border-radius: 10px;
-            border: 2px solid #007bff;
-            min-height: 40px;
-            display: flex;
-            align-items: center;
-            justify-content: center;
-            text-align: center;
-            font-weight: bold;
+            bottom: 20px;
+            background: rgba(255, 255, 255, 0.9);
+            backdrop-filter: blur(5px);
+            padding: 15px 25px;
+            border-radius: 20px 20px 5px 20px; /* 右下角對話 */
+            border: 1px solid rgba(0,0,0,0.05);
+            box-shadow: 0 5px 20px rgba(0,123,255,0.15);
             color: #333;
-            box-shadow: 0 4px 10px rgba(0,0,0,0.1);
+            font-weight: 600;
+            font-size: 1.1em;
+            max-width: 80%;
+            text-align: center;
             opacity: 0; 
-            transition: opacity 0.3s;
+            transform: translateY(10px);
+            transition: all 0.4s ease;
+            z-index: 10;
         }
-        .ai-bubble-container.show { opacity: 1; }
+        .ai-bubble-container.show { opacity: 1; transform: translateY(0); }
 
-        /* --- 隱藏區 (為了不破壞 JS 邏輯，保留 ID 但隱藏) --- */
-        .logic-holder { 
-            position: absolute; 
-            opacity: 0; 
-            pointer-events: none; 
-            height: 0; width: 0; overflow: hidden;
-        }
-
-        /* 原本的 JS 會把對話塞進 #current-dialogue-area
-           我們透過 CSS 把它隱藏，然後用 MutationObserver 
-           把內容同步到新的 UI 區塊 
-        */
+        /* 邏輯隱藏區 */
+        .logic-holder { position: absolute; opacity: 0; pointer-events: none; height: 0; width: 0; }
         #current-dialogue-area { opacity: 0; height: 0; position: absolute; }
-        
-        /* 核心人格顯示微調 */
-        .core-status {
-            position: absolute;
-            top: 10px; right: 10px;
-            background: rgba(255,255,255,0.9);
-            padding: 5px 10px;
-            border-radius: 15px;
-            border: 1px solid #ccc;
-            font-size: 0.8em;
-            z-index: 5;
-        }
-        #personality-display { font-weight: bold; color: #6f42c1; }
-
     </style>
 </head>
 <body>
 
     <div class="connection-bar">
-        <span style="color:white; line-height: 30px;">🔧 系統設定: </span>
-        <input type="text" id="tunnel-url" placeholder="輸入 Cloudflare URL">
+        <span>⚙️ 系統設定: </span>
+        <input type="text" id="tunnel-url" placeholder="請輸入 Cloudflare URL...">
         <button onclick="manualConnect()">連線</button>
     </div>
 
@@ -303,19 +323,23 @@
         
         <div class="left-column">
             
-            <h3>語音輸入</h3>
-            <div class="video-box">
-                <div id="camera-preview">
-                    <video id="video-stream" autoplay muted></video>
+            <div>
+                <h3>👁️ 語音輸入 (User)</h3>
+                <div class="video-box">
+                    <div id="camera-preview">
+                        <video id="video-stream" autoplay muted></video>
+                    </div>
                 </div>
                 <button id="record-button" class="btn-idle" onclick="toggleRecording()" disabled>
-                    <span id="record-text">等待連線...</span>
+                    <span style="font-size: 1.2em;">🎙️</span> <span id="record-text">等待連線...</span>
                 </button>
             </div>
 
-            <h3>文字輸入</h3>
             <div class="text-input-box">
-                <div id="user-text-mirror" class="user-text-display">...</div>
+                <h3>💬 識別內容</h3>
+                <div id="user-text-mirror" class="user-chat-bubble">
+                    <span style="color:#aaa; font-style:italic;">(等待說話...)</span>
+                </div>
                 
                 <div class="visualizer-container">
                     <canvas id="audio-visualizer"></canvas>
@@ -325,47 +349,48 @@
 
         <div class="right-column">
             
-            <h3>多模態情緒感知</h3>
-            <div class="emotion-section">
-                <div class="progress-row">
-                    <div class="progress-label">文字</div>
-                    <div class="progress-track"><div class="progress-bar bar-text" id="bar-text-visual"></div></div>
-                    <div class="progress-value" id="val-text-visual">0%</div>
+            <div>
+                <h3>📊 多模態情緒感知 (Emotion API)</h3>
+                <div class="emotion-card">
+                    <div class="progress-row">
+                        <div class="progress-label">文字</div>
+                        <div class="progress-track"><div class="progress-bar bar-text" id="bar-text-visual"></div></div>
+                        <div class="progress-value" id="val-text-visual">0%</div>
+                    </div>
+                    <div class="progress-row">
+                        <div class="progress-label">語音</div>
+                        <div class="progress-track"><div class="progress-bar bar-audio" id="bar-audio-visual"></div></div>
+                        <div class="progress-value" id="val-audio-visual">0%</div>
+                    </div>
+                    <div class="progress-row">
+                        <div class="progress-label">臉部</div>
+                        <div class="progress-track"><div class="progress-bar bar-face" id="bar-face-visual"></div></div>
+                        <div class="progress-value" id="val-face-visual">0%</div>
+                    </div>
+                    <div class="hidden-data">
+                        <span id="text-emotion-display">--</span>
+                        <span id="audio-emotion-display">--</span>
+                        <span id="facial-emotion-display">--</span>
+                    </div>
                 </div>
-                <div class="progress-row">
-                    <div class="progress-label">語音</div>
-                    <div class="progress-track"><div class="progress-bar bar-audio" id="bar-audio-visual"></div></div>
-                    <div class="progress-value" id="val-audio-visual">0%</div>
-                </div>
-                <div class="progress-row">
-                    <div class="progress-label">臉部</div>
-                    <div class="progress-track"><div class="progress-bar bar-face" id="bar-face-visual"></div></div>
-                    <div class="progress-value" id="val-face-visual">0%</div>
-                </div>
+            </div>
 
-                <div class="hidden-data">
-                    <span id="text-emotion-display">--</span>
-                    <span id="audio-emotion-display">--</span>
-                    <span id="facial-emotion-display">--</span>
+            <div>
+                <div class="calc-header">
+                    <h3>🧠 決策計算過程</h3>
+                    <div class="status-badge">
+                        人格: <span id="personality-display">等待中</span> 
+                        <span id="personality-mode-tag" style="font-weight:normal;">(Auto)</span>
+                    </div>
+                </div>
+                <div id="calc-display-area" class="calc-terminal">
+                    > System initialized...<br>> Waiting for input...
                 </div>
             </div>
 
-            <div style="display: flex; justify-content: space-between; align-items: baseline;">
-                <h3>決策計算過程</h3>
-                <div style="font-size: 0.9em;">
-                    當前人格: <span id="personality-display">等待中...</span> 
-                    <span id="personality-mode-tag" style="font-size:0.8em; color:#999;">(Auto)</span>
-                </div>
-            </div>
-            
-            <div id="calc-display-area" class="calc-section">
-                (系統待命...)
-            </div>
-
-            <div class="avatar-section">
-                <img id="assistant-avatar" src="" alt="AI Avatar">
-                
-                <div id="ai-bubble-mirror" class="ai-bubble-container">
+            <div class="avatar-stage">
+                <div class="avatar-glow"></div>
+                <img id="assistant-avatar" src="" alt=""> <div id="ai-bubble-mirror" class="ai-bubble-container">
                     ...
                 </div>
             </div>
@@ -373,11 +398,11 @@
     </div>
 
     <div class="logic-holder">
-        <div id="current-dialogue-area"></div> <audio id="tts-audio"></audio>
+        <div id="current-dialogue-area"></div>
+        <audio id="tts-audio"></audio>
     </div>
 
     <script>
-        /* --- 邏輯部分 (保留原本功能) --- */
         const STATE = { IDLE: 'IDLE', RECORDING: 'RECORDING', PROCESSING: 'PROCESSING' };
         let currentState = STATE.IDLE;
         let mediaRecorder, audioStream, videoTrack, audioContext, analyserNode;
@@ -392,14 +417,13 @@
         async function manualConnect() {
             const url = document.getElementById('tunnel-url').value.trim();
             if(!url) return alert("請輸入網址");
-            
             try {
                 const testImg = new Image();
                 testImg.src = `${url}/static/image/humorous.png`;
                 testImg.onload = () => {
                     CURRENT_BASE_URL = url.endsWith('/') ? url.slice(0, -1) : url;
                     document.getElementById('record-button').disabled = false;
-                    document.getElementById('record-text').textContent = "點擊開始 (Click to Start)";
+                    document.getElementById('record-text').textContent = "點擊開始對話";
                     loadAvatar('humorous'); 
                     initMedia();
                 };
@@ -429,30 +453,23 @@
         function drawVisualizer() {
             const canvas = document.getElementById('audio-visualizer');
             const ctx = canvas.getContext('2d');
-            
-            // 修正 Canvas 寬度
             const container = canvas.parentElement;
             canvas.width = container.clientWidth;
             canvas.height = container.clientHeight;
-
             const bufferLength = analyserNode.frequencyBinCount;
             const dataArray = new Uint8Array(bufferLength);
-            
             const draw = () => {
                 requestAnimationFrame(draw);
                 analyserNode.getByteFrequencyData(dataArray);
-                ctx.fillStyle = '#fff'; // 背景白
-                ctx.fillRect(0, 0, canvas.width, canvas.height);
-                
+                ctx.clearRect(0, 0, canvas.width, canvas.height); // 透明背景
                 const barWidth = (canvas.width / bufferLength) * 2.5;
                 let x = 0;
                 for(let i = 0; i < bufferLength; i++) {
                     const barHeight = (dataArray[i] / 255) * canvas.height;
-                    ctx.fillStyle = `rgb(100, 149, 237)`; // 藍色波形
+                    ctx.fillStyle = `rgb(79, 172, 254)`; // 科技藍
                     ctx.fillRect(x, canvas.height - barHeight, barWidth, barHeight);
                     x += barWidth + 1;
                 }
-                // VAD 邏輯
                 let sum = 0; for(let i=0; i<bufferLength; i++) sum += dataArray[i];
                 if(currentState === STATE.RECORDING && (sum/bufferLength) > VOICE_THRESHOLD) lastSpeechTime = Date.now();
             };
@@ -461,7 +478,6 @@
 
         let lastSpeechTime = 0;
         let silenceTimer = null;
-
         function toggleRecording() {
             if(Date.now() < ignoreClicksUntil) return;
             if(currentState === STATE.IDLE) startRecording();
@@ -525,29 +541,26 @@
         }
 
         function handleResult(data) {
-            // 更新對話 (這是原本的 ID，內容會被下方的 Observer 同步到新 UI)
+            // 邏輯數據寫入 (內容會被下方 Observer 同步到 UI)
             const chatArea = document.getElementById('current-dialogue-area');
             chatArea.innerHTML = `
                 <div class="bubble user-bubble">${data.user_text || "..."}</div>
                 <div class="bubble bot-bubble">${data.reply || "..."}</div>
             `;
             
-            // 更新左側數據
             const mapE = { "comforting": "🤗 安撫", "cheerful": "😄 開朗", "humorous": "😆 幽默", "gentle": "💝 溫柔", "rational": "🤔 理性", "encouraging": "💪 鼓勵" };
             const pName = mapE[data.personality] || data.personality;
             document.getElementById('personality-display').textContent = pName;
-            document.getElementById('personality-mode-tag').textContent = data.new_manual_personality ? "手動介入" : "自動演算";
+            document.getElementById('personality-mode-tag').textContent = data.new_manual_personality ? "(手動)" : "(自動)";
 
             if(data.emotion_results) {
-                // 原本 JS 寫入文字，下方的 UI 同步腳本會抓取這些文字並畫出進度條
                 if(data.emotion_results.text) document.getElementById('text-emotion-display').textContent = `${data.emotion_results.text.emotion} ${(data.emotion_results.text.score*100).toFixed(0)}%`;
                 if(data.emotion_results.audio) document.getElementById('audio-emotion-display').textContent = `${data.emotion_results.audio.emotion} ${(data.emotion_results.audio.score*100).toFixed(0)}%`;
                 if(data.emotion_results.facial) document.getElementById('facial-emotion-display').textContent = `${data.emotion_results.facial.emotion} ${(data.emotion_results.facial.confidence*100).toFixed(0)}%`;
             }
 
-            // 更新計算顯示 (直接秀出)
             if(data.calculation_logs) {
-                document.getElementById('calc-display-area').textContent = data.calculation_logs.join('\n');
+                document.getElementById('calc-display-area').innerHTML = data.calculation_logs.join('<br>');
             }
 
             loadAvatar(data.personality);
@@ -571,17 +584,14 @@
     </script>
 
     <script>
-        // 1. 監聽對話更新，同步到新的文字框
         const dialogueObserver = new MutationObserver((mutations) => {
             const source = document.getElementById('current-dialogue-area');
             const userBubble = source.querySelector('.user-bubble');
             const botBubble = source.querySelector('.bot-bubble');
             
-            // 更新 User 文字
             const userMirror = document.getElementById('user-text-mirror');
             if(userBubble) userMirror.textContent = userBubble.textContent;
 
-            // 更新 Bot 氣泡
             const aiMirror = document.getElementById('ai-bubble-mirror');
             if(botBubble) {
                 aiMirror.textContent = botBubble.textContent;
@@ -592,12 +602,11 @@
         });
         dialogueObserver.observe(document.getElementById('current-dialogue-area'), { childList: true, subtree: true });
 
-        // 2. 監聽情緒分數更新，同步到進度條
         function syncProgressBar(sourceId, barId, valId) {
             const source = document.getElementById(sourceId);
             const observer = new MutationObserver(() => {
-                const text = source.textContent; // 例如 "happy 80%"
-                const match = text.match(/(\d+)%/); // 抓取數字
+                const text = source.textContent; 
+                const match = text.match(/(\d+)%/); 
                 if (match) {
                     const percent = match[1];
                     document.getElementById(barId).style.width = percent + "%";
@@ -606,11 +615,9 @@
             });
             observer.observe(source, { childList: true, characterData: true, subtree: true });
         }
-
         syncProgressBar('text-emotion-display', 'bar-text-visual', 'val-text-visual');
         syncProgressBar('audio-emotion-display', 'bar-audio-visual', 'val-audio-visual');
         syncProgressBar('facial-emotion-display', 'bar-face-visual', 'val-face-visual');
     </script>
-
 </body>
 </html>
